@@ -1,42 +1,66 @@
 :root {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #1f2430;
 }
 body {
   margin: 0;
-  background: #f8f9fb;
-  color: #222;
+  background: #f5f7fb;
 }
 main {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: 2rem 1rem 4rem;
+  padding: 1.2rem;
 }
+header h1 { margin: 0 0 0.5rem; }
 section {
-  background: white;
+  background: #fff;
   border-radius: 12px;
   padding: 1rem;
-  margin-bottom: 1rem;
+  margin: 0.9rem 0;
 }
-label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+.pill-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+.pill {
+  background: #ebeff8;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.9rem;
 }
-input,
-textarea {
-  width: 100%;
-  margin-top: 0.25rem;
-  margin-bottom: 0.75rem;
-  padding: 0.5rem;
+.ok { background: #d2f8dc; border: none; padding: 0.5rem 0.8rem; border-radius: 8px; }
+.bad { background: #ffd7d7; border: none; padding: 0.5rem 0.8rem; border-radius: 8px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+.product {
+  text-align: left;
+  border: 1px solid #d6dced;
+  border-radius: 10px;
+  background: white;
+  padding: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.line {
+  display: grid;
+  grid-template-columns: 2fr 1fr 90px 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+}
+input, select { padding: 0.35rem; }
+.checkout-row {
+  margin-top: 0.7rem;
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 button {
-  border: 0;
-  border-radius: 8px;
-  padding: 0.5rem 0.9rem;
-  margin-right: 0.5rem;
   cursor: pointer;
+  border-radius: 8px;
+  border: none;
+  padding: 0.45rem 0.8rem;
 }
-.online { background: #d5f5dc; }
-.offline { background: #ffd8d8; }
-.row { margin-top: 0.75rem; }
 .status { font-weight: 700; }

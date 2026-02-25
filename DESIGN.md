@@ -1,73 +1,63 @@
-# Edge-First Checkout System Design
+# ICA Always-On Checkout — System Design
 
-## 1. Architecture Overview
-The MVP uses a single FastAPI service containing two logical domains:
-- **Edge domain**: local transaction intake and pending queue.
-- **Central domain**: headquarters ledger that receives replicated edge transactions.
+## 1. Architecture
 
-This keeps hackathon setup simple while preserving the core resilience mechanics.
+## 1.1 Components
+1. **Kiosk Web App (`frontend/`)**
+   - Self-checkout UI (catalog, cart, quantity edits, payment, checkout).
+   - Sends heartbeat to edge service every 5 seconds with central-link state.
+2. **Edge API (`backend/`)**
+   - Records checkout orders to local edge DB.
+   - Exposes pending queue and sync APIs.
+   - Executes sync to central ledger when link is available.
+3. **Dashboard Web App (`dashboard/`)**
+   - Real-time operational panel for fleet-level and kiosk-level metrics.
+4. **Central Ledger (logical domain in backend)**
+   - Receives synchronized orders with unique order IDs.
 
-## 2. Storage Design
-### 2.1 Edge database (`edge_store.db`)
-Table: `edge_transactions`
-- `id` (PK, autoincrement)
-- `store_id`
-- `cashier_id`
-- `customer_reference`
-- `amount_total`
-- `currency`
-- `payload_json`
-- `created_at`
-- `synced_at` (nullable; null = pending)
+## 1.2 Persistence Model
+### Edge DB (`edge_store.db`)
+- `kiosks`: heartbeat and connectivity state.
+- `edge_orders`: local durable orders with idempotency key and sync state.
 
-### 2.2 Central database (`central_hq.db`)
-Table: `central_transactions`
-- `id` (PK, autoincrement)
-- `edge_transaction_id`
-- `store_id`
-- `cashier_id`
-- `amount_total`
-- `currency`
-- `payload_json`
-- `received_at`
-- Unique constraint `(edge_transaction_id, store_id)` for idempotency
+### Central DB (`central_hq.db`)
+- `central_orders`: replicated central ledger.
 
-## 3. Connectivity Modes
-### Offline Mode
-1. Cashier submits checkout payload.
-2. Edge API writes transaction locally.
-3. `synced_at` remains null.
-4. Sync attempts return 503 and queue stays intact.
+## 2. Idempotency & Deduplication Strategy
+- **Checkout idempotency**: unique `(kiosk_id, idempotency_key)` in edge DB.
+- **Global order identity**: `order_uuid = kiosk_id + ':' + idempotency_key`.
+- **Central dedup**: unique `order_uuid` in central DB.
+- Sync treats duplicate insert as success-equivalent and marks edge row synced.
 
-### Online Mode
-1. Edge API writes transaction locally.
-2. Sync process scans pending rows.
-3. Each row is inserted into central ledger.
-4. Edge row is marked `synced_at`.
+## 3. Offline and Online Modes
+### 3.1 Offline-to-Central
+- Kiosk heartbeat reports `central_link_up=false`.
+- Checkout writes to `edge_orders(sync_state='pending')`.
+- Sync endpoint returns `503` for that kiosk until link recovers.
 
-## 4. API Design (REST)
-- `POST /edge/transactions`: store checkout transaction locally.
-- `GET /edge/transactions?synced=true|false`: view edge queue.
-- `POST /edge/sync/push`: push pending edge rows to central.
-- `GET /central/transactions`: view central ledger.
-- `GET /health`: health check.
+### 3.2 Recovery
+- Heartbeat flips to `central_link_up=true`.
+- Sync endpoint pushes pending edge rows in order.
+- Edge rows marked `synced` with `synced_at`; central ledger converges.
 
-FastAPI auto-generates OpenAPI docs at `/docs`, so no separate API spec file is required.
+## 4. API Surface
+- `GET /catalog`
+- `POST /edge/heartbeat`
+- `POST /edge/checkout`
+- `POST /edge/sync`
+- `GET /edge/orders`
+- `GET /central/orders`
+- `GET /dashboard/overview`
+- `GET /dashboard/kiosks`
+- `GET /health`
 
-## 5. Reliability Strategies
-- Local durable write before ack.
-- Pull-from-edge queue model for deterministic retries.
-- Idempotency via central unique key.
-- Explicit sync state (`synced_at`) for observability.
+FastAPI OpenAPI docs remain available at `/docs`.
 
-## 6. Security and Compliance (MVP)
-- Strict request schema validation via Pydantic.
-- Keep secrets/config in `.env` (not hard-coded).
-- Recommend TLS, authN/authZ, audit trails, and encryption-at-rest in production.
+## 5. Consistency and Reliability Notes
+- Edge commit precedes success response to ensure zero-lost-sale behavior at kiosk acceptance boundary.
+- System targets **eventual consistency** for central data, not immediate consistency during outage.
+- Sync is replay-safe due to idempotent keys at both edge and central.
 
-## 7. Performance Notes
-- SQLite is suitable for single-node demo and moderate local throughput.
-- Batched sync loop keeps logic simple; can be extended to chunked/parallel workers.
-
-## 8. Diagram Sources
-PlantUML source files are in `docs/diagrams`.
+## 6. Security & Production Evolution
+- Current MVP includes schema validation and config-file based settings.
+- Recommended next steps: authn/authz, signed event envelopes, encrypted storage, CDC/message bus replication, audit trails, and multi-store sharding.

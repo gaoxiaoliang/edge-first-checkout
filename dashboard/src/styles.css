@@ -1,0 +1,15 @@
+:root { font-family: Inter, system-ui, sans-serif; }
+body { margin: 0; background: #f5f7fb; }
+main { max-width: 1200px; margin: 0 auto; padding: 1.2rem; }
+button { border: 0; border-radius: 8px; padding: 0.45rem 0.8rem; cursor: pointer; }
+.cards {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin: 1rem 0;
+}
+article { background: #fff; border-radius: 10px; padding: 0.8rem; font-weight: 600; }
+section { background: #fff; border-radius: 12px; padding: 1rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th, td { border-bottom: 1px solid #e5eaf4; padding: 0.5rem; text-align: left; }
+.err { color: #b20000; font-weight: 700; }

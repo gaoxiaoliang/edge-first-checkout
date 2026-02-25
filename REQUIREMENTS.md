@@ -1,37 +1,43 @@
-# Always-On Checkout Requirements
+# ICA Always-On Checkout — Requirements Specification
 
-## 1. Problem Statement
-Retail checkout must continue during WAN outages. Store devices should persist transactions locally and synchronize to the central system after connectivity recovery, with no lost sales.
+## 1. Objective
+Build a resilient self-checkout platform for ICA stores where kiosks can always complete checkout locally, even when store-to-central connectivity is down, and later synchronize transactions to central systems without data loss or duplication.
 
-## 2. Scope
-This repository delivers a hackathon-ready demo with:
-- Edge-side transaction capture API.
-- Central-side transaction ledger API.
-- Offline/online simulation and sync orchestration.
-- Web UI demonstrating cashier flow and synchronization behavior.
+## 2. Key Principles
+- **Edge-first**: critical checkout writes happen on edge storage first.
+- **Offline-first**: user checkout UX must continue while central link is down.
+- **Eventual consistency**: central ledger converges after recovery.
+- **Data sync**: queued edge orders are pushed once uplink recovers.
+- **Zero lost sales**: every accepted checkout is durable and recoverable.
 
 ## 3. Functional Requirements
-1. **Local recording**: A checkout transaction must be accepted and persisted even when central connectivity is unavailable.
-2. **Queue visibility**: Operators can list pending unsynced transactions.
-3. **Recovery sync**: Once connectivity is restored, unsynced transactions are pushed to central storage.
-4. **Idempotency**: Duplicate sync attempts must not create duplicate central transactions.
-5. **Operational visibility**: Operators can inspect edge and central ledgers.
-6. **Config-driven deployment**: Runtime paths and store identity come from config/env.
+1. Kiosk can add products, change quantities, choose payment method, and submit checkout.
+2. Kiosk UI must display network state (central link up/down) using heartbeat updates.
+3. During central outage, checkout still succeeds and transaction is persisted locally.
+4. When network recovers, a sync mechanism pushes pending edge orders to central storage.
+5. API must support idempotent checkout requests (retry-safe).
+6. Sync must be idempotent and avoid central duplicates.
+7. Admin dashboard must display:
+   - total kiosk count,
+   - online/offline kiosks,
+   - pending sync order count,
+   - per-kiosk order volume and order amount (edge and central).
 
-## 4. Non-Functional Requirements
-- **Availability**: Edge transaction writes should remain available when central link is down.
-- **Data durability**: Edge writes are persisted in local SQLite before response.
-- **Performance target**: Typical local checkout write should complete in under 100ms on a laptop-class device.
-- **Security baseline**: Input schema validation and explicit CORS control for demo environment.
-- **Maintainability**: Minimal dependencies and clear module boundaries.
+## 4. Data and Persistence Requirements
+- Edge data format: normalized order metadata + JSON line-items payload.
+- Edge persistence location: SQLite database on edge service host (`edge_store.db`).
+- Central persistence location: SQLite database for central ledger (`central_hq.db`).
+- Offline queue state: `sync_state='pending'` with transition to `synced` after successful/duplicate-safe sync.
 
-## 5. Assumptions
-- This demo models one store edge node and one central service in a single backend process for speed of delivery.
-- Payment authorization is out of scope (focus is transaction recording resilience).
-- Strong consistency with external ERP is out of scope for hackathon MVP.
+## 5. Non-Functional Requirements
+- Durable write acknowledgement from edge only after local commit.
+- Single-order consistency: order total must equal sum(line quantity * price).
+- Observability: heartbeat timestamps, queue depth, and sync outcomes are visible by API/dashboard.
+- Maintainability: keep dependencies minimal and configuration file based.
 
 ## 6. Acceptance Criteria
-- Cashier can submit transactions while "offline" and observe pending queue growth.
-- Sync endpoint returns success after connectivity is restored.
-- Synced transactions become visible in central ledger.
-- Re-running sync does not duplicate already delivered transactions.
+- Central link down: checkout remains functional and pending queue increases.
+- Central link up: sync decreases pending queue and increases central order count.
+- Retry checkout with same idempotency key does not create duplicate edge orders.
+- Re-sync after already delivered orders does not create duplicate central orders.
+- Dashboard reflects online/offline kiosk split and per-kiosk KPIs within refresh interval.

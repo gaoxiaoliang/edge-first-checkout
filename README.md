@@ -1,85 +1,74 @@
 # Edge First Checkout
 
-Edge-first, always-on checkout demo for the ICA hackathon challenge.
+A richer ICA hackathon implementation focused on **Edge-first + Offline-first + Eventual consistency + Data sync + Zero lost sales**.
 
-## What is implemented
-- **Requirements document**: [`REQUIREMENTS.md`](./REQUIREMENTS.md)
-- **System design document**: [`DESIGN.md`](./DESIGN.md)
-- **Architecture diagram source (PlantUML)**: [`docs/diagrams/architecture.puml`](./docs/diagrams/architecture.puml)
-- **Backend** (`backend/`): FastAPI + SQLite, with edge queue and central ledger
-- **Frontend** (`frontend/`): React app simulating cashier flow, online/offline mode, and sync
+## Delivered systems
+- `backend/`: FastAPI edge/central simulation API with idempotent checkout and sync.
+- `frontend/`: self-checkout kiosk simulator (catalog/cart/edit qty/pay/checkout).
+- `dashboard/`: admin dashboard for kiosk fleet and KPI visibility.
+- `REQUIREMENTS.md`: formal requirements.
+- `DESIGN.md`: architecture and distributed consistency design.
+- `docs/diagrams/architecture.puml`: PlantUML source.
 
-## Technology choices
+## Core behaviors
+1. Kiosk submits checkouts that are always committed to edge-local SQLite first.
+2. Kiosk heartbeat reports central-link state and drives online/offline status.
+3. When central link is down, checkouts continue and accumulate in pending queue.
+4. When central link recovers, sync pushes pending orders to central ledger.
+5. Idempotency avoids duplicates at both checkout and sync stages.
+6. Dashboard shows total kiosks, online/offline split, pending queue depth, and per-kiosk volume/revenue.
+
+## Technology stack
 ### Backend
 - Python 3.12
-- uvicorn 0.40.0
 - FastAPI 0.128.7
-- python-multipart 0.0.22
+- uvicorn 0.40.0
 - pydantic 2.12.5
 - pydantic-settings 2.12.0
+- python-multipart 0.0.22
 - aiosqlite 0.22.1
 
-### Frontend
-- React 19.2.0
-- Vite 7.x (lightweight dev/build tooling)
+### Frontends
+- React 19.2.0 + Vite
 
-## Why web app instead of mobile app
-For hackathon speed and easier teammate onboarding, a web app provides:
-- Zero mobile packaging overhead
-- Fast iteration and demo readiness
-- Cross-platform access from any laptop/browser
-
-## Project structure
-```
-.
-├── REQUIREMENTS.md
-├── DESIGN.md
-├── docs/
-│   └── diagrams/
-│       └── architecture.puml
-├── backend/
-│   ├── .env.example
-│   ├── pyproject.toml
-│   └── app/
-└── frontend/
-    ├── package.json
-    └── src/
-```
-
-## Backend setup and run
+## Run locally
+### 1) Backend
 ```bash
 cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 cp .env.example .env
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-API docs are available at: `http://127.0.0.1:8000/docs`
-
-## Frontend setup and run
+### 2) Kiosk simulator
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+Open: http://127.0.0.1:5173
 
-Open `http://127.0.0.1:5173`.
+### 3) Dashboard
+```bash
+cd dashboard
+npm install
+npm run dev
+```
+Open: http://127.0.0.1:5174
 
-Optional environment variable:
-- `VITE_API_BASE` (default: `http://127.0.0.1:8000`)
+## Demo scenario
+1. Open kiosk app (`5173`), add products, adjust quantities, and checkout.
+2. Toggle **Central Link** to `DOWN` and keep checking out; orders still succeed.
+3. Observe pending orders increase in kiosk queue.
+4. Toggle **Central Link** to `UP`; sync runs and pending orders drop.
+5. Open dashboard (`5174`) and verify online/offline kiosk state and KPI updates.
 
-## Demo walkthrough
-1. Start backend and frontend.
-2. In UI, toggle network state to **Offline**.
-3. Submit checkout transactions; they appear in Edge queue as unsynced.
-4. Toggle to **Online** and click **Sync pending transactions**.
-5. Verify records appear in Central ledger.
+## Data storage and format
+- Edge orders are stored in `backend/data/edge_store.db`, table `edge_orders`.
+- Central ledger is stored in `backend/data/central_hq.db`, table `central_orders`.
+- Line items are stored as JSON payload (`lines_json`) for replay and auditing.
 
-## Notes for production hardening
-- Split edge and central services physically
-- Add authN/authZ and cashier identity integration
-- Add TLS, encryption-at-rest, audit logs
-- Use message bus / durable replication for larger scale
-- Add conflict handling and replay metrics dashboards
+## API docs
+When backend is running, visit: http://127.0.0.1:8000/docs

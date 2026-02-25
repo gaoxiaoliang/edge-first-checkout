@@ -1,28 +1,33 @@
 @startuml
 skinparam componentStyle rectangle
 
-actor Cashier
+actor Shopper
+actor Admin
 
-rectangle "Store Edge Node" {
-  component "Checkout Web App\n(React)" as Web
-  component "Edge API\n(FastAPI)" as EdgeApi
-  database "edge_store.db\nSQLite" as EdgeDb
+rectangle "Store Edge" {
+  component "Kiosk Web App\n(React)" as Kiosk
+  component "Edge API\n(FastAPI)" as Edge
+  database "edge_store.db\nSQLite" as EdgeDB
 }
 
-rectangle "Central HQ" {
-  component "Central Ledger API\n(logical domain)" as CentralApi
-  database "central_hq.db\nSQLite" as CentralDb
+rectangle "Central" {
+  component "Central Ledger\n(logical domain)" as Central
+  database "central_hq.db\nSQLite" as CentralDB
 }
 
-Cashier --> Web : Create checkout
-Web --> EdgeApi : POST /edge/transactions
-EdgeApi --> EdgeDb : Insert local tx
+component "Dashboard Web App\n(React)" as Dash
 
-Web --> EdgeApi : POST /edge/sync/push
-EdgeApi --> CentralApi : Push pending txs
-CentralApi --> CentralDb : Upsert by\n(edge_tx_id, store_id)
-EdgeApi --> EdgeDb : Mark synced_at
+Shopper --> Kiosk : Scan/add/edit/pay
+Kiosk --> Edge : POST /edge/checkout
+Edge --> EdgeDB : Durable write
 
-Web --> EdgeApi : GET /edge/transactions
-Web --> CentralApi : GET /central/transactions
+Kiosk --> Edge : POST /edge/heartbeat
+Kiosk --> Edge : POST /edge/sync
+Edge --> Central : Push pending orders
+Central --> CentralDB : INSERT order_uuid (unique)
+Edge --> EdgeDB : Mark synced
+
+Admin --> Dash : View fleet health
+Dash --> Edge : GET /dashboard/*
+
 @enduml
