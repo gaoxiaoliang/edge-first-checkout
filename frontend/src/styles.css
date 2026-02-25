@@ -20,6 +20,12 @@ header {
   align-items: center;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .status { padding: 0.5rem 1rem; border-radius: 999px; color: white; }
 .status.online { background: #16a34a; }
 .status.offline { background: #dc2626; }
@@ -57,11 +63,17 @@ header {
   gap: 0.4rem;
 }
 
+.product-card:disabled,
+button:disabled,
+input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .product-card span {
   color: #334155;
 }
 
-.row,
 .cart-row,
 .checkout-row {
   display: flex;
@@ -84,6 +96,81 @@ button {
   border: none;
   color: white;
   font-weight: 600;
+}
+
+.menu-wrap {
+  position: relative;
+}
+
+.menu-button {
+  background: #0f172a;
+}
+
+.menu-dropdown {
+  position: absolute;
+  right: 0;
+  margin-top: 0.4rem;
+  min-width: 240px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.menu-dropdown button {
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+  border-radius: 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.menu-dropdown button:last-child {
+  border-bottom: none;
+}
+
+.pending-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pending-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pending-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 20;
+}
+
+.modal {
+  width: min(420px, calc(100vw - 2rem));
+  background: white;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.column-form {
+  display: grid;
+  gap: 0.7rem;
 }
 
 @media (max-width: 900px) {
