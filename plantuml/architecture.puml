@@ -1,0 +1,25 @@
+@startuml
+left to right direction
+
+actor Cashier
+node "Store Edge Terminal" {
+  component "Self-Checkout UI\n(React)" as SC
+  database "Local Queue\n(localStorage)" as LQ
+}
+
+cloud "Central Platform" {
+  component "Backend API\n(FastAPI + SQLite)" as API
+  component "Dashboard UI\n(React)" as DB
+  database "Central SQLite" as CDB
+}
+
+Cashier --> SC : Scan / Add items
+SC --> API : /auth/login (JWT)
+SC --> API : /transactions (online)
+SC --> LQ : Cache tx (offline)
+SC --> API : /heartbeat
+SC --> API : /sync/offline (batch)
+API --> CDB : Idempotent writes
+DB --> API : Dashboard APIs
+
+@enduml
