@@ -19,7 +19,6 @@ export function App() {
   const [cart, setCart] = useState([])
   const [networkOnline, setNetworkOnline] = useState(false)
   const [syncCount, setSyncCount] = useState(0)
-  const [statusMessage, setStatusMessage] = useState('Ready')
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState('checkout')
 
@@ -78,10 +77,8 @@ export function App() {
         if (res.ok) {
           localStorage.removeItem(OFFLINE_KEY)
           setSyncCount((prev) => prev + 1)
-          setStatusMessage(`Synchronized ${queue.length} offline transaction(s).`)
         }
       } catch {
-        setStatusMessage('Synchronization failed. Retrying in background...')
       }
     }
 
@@ -104,7 +101,6 @@ export function App() {
     const data = await res.json()
     localStorage.setItem(TOKEN_KEY, data.access_token)
     setToken(data.access_token)
-    setStatusMessage('Terminal authenticated.')
   }
 
   const logout = () => {
@@ -112,7 +108,6 @@ export function App() {
     setToken('')
     setMenuOpen(false)
     setCart([])
-    setStatusMessage('Logged out.')
     setActiveView('checkout')
   }
 
@@ -169,17 +164,14 @@ export function App() {
         body: JSON.stringify(payload)
       })
       if (res.ok) {
-        setStatusMessage('Payment successful and stored online.')
         setCart([])
       } else {
-        setStatusMessage('Online write failed. Saved offline to avoid lost sale.')
         saveOffline(payload)
       }
       return
     }
 
     saveOffline(payload)
-    setStatusMessage('Offline mode: transaction cached locally for sync.')
     setCart([])
   }
 
@@ -258,9 +250,16 @@ export function App() {
           <div className="panel">
             <h2>Current Basket</h2>
             {cart.length === 0 && <p>No products selected.</p>}
+            {cart.length > 0 && (
+              <div className="cart-table-header">
+                <span>Product</span>
+                <span>Quantity</span>
+                <span>Total</span>
+              </div>
+            )}
             {cart.map((item) => (
               <div key={item.id} className="cart-row">
-                <span>{item.name}</span>
+                <span className="cart-product-name">{item.name}</span>
                 <input
                   type="number"
                   value={item.quantity}
@@ -268,14 +267,13 @@ export function App() {
                   onChange={(e) => updateQuantity(item.id, e.target.value)}
                   disabled={!token}
                 />
-                <strong>{(item.quantity * item.price).toFixed(2)} SEK</strong>
+                <strong className="cart-line-total">{(item.quantity * item.price).toFixed(2)} SEK</strong>
               </div>
             ))}
             <div className="checkout-row">
               <strong>Total: {total.toFixed(2)} SEK</strong>
               <button onClick={checkout} disabled={!token}>Checkout</button>
             </div>
-            <p>Pending offline sync: {pendingTransactions.length}</p>
           </div>
         </section>
       )}
@@ -302,8 +300,6 @@ export function App() {
           </div>
         </div>
       )}
-
-      <footer>{statusMessage}</footer>
     </div>
   )
 }
