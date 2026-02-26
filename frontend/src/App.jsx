@@ -21,6 +21,7 @@ export function App() {
   const [syncCount, setSyncCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState('checkout')
+  const [checkoutState, setCheckoutState] = useState('idle')
 
   const pendingTransactions = useMemo(
     () => JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]'),
@@ -112,14 +113,7 @@ export function App() {
   }
 
   const showTerminalInfo = () => {
-    window.alert(
-      [
-        `Terminal Code: ${terminalCode}`,
-        `Authentication: ${token ? 'Signed in' : 'Signed out'}`,
-        `Network: ${networkOnline ? 'Online' : 'Offline'}`,
-        `Pending Sync: ${pendingTransactions.length}`
-      ].join('\n')
-    )
+    setActiveView('terminal-info')
     setMenuOpen(false)
   }
 
@@ -146,33 +140,47 @@ export function App() {
   }
 
   const checkout = async () => {
-    if (!cart.length || !token) return
-    const payload = {
-      idempotency_key: crypto.randomUUID(),
-      total_amount: Number(total.toFixed(2)),
-      occurred_at: new Date().toISOString(),
-      items: cart.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, quantity }))
-    }
+    if (!cart.length || !token || checkoutState === 'processing') return
+    setCheckoutState('processing')
 
-    if (networkOnline) {
-      const res = await fetch(`${API_BASE}/transactions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-      })
-      if (res.ok) {
-        setCart([])
+    try {
+      const randomDelay = Math.floor(Math.random() * 3000) + 2000
+      await new Promise((resolve) => setTimeout(resolve, randomDelay))
+
+      const payload = {
+        idempotency_key: crypto.randomUUID(),
+        total_amount: Number(total.toFixed(2)),
+        occurred_at: new Date().toISOString(),
+        items: cart.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, quantity }))
+      }
+
+      if (networkOnline) {
+        const res = await fetch(`${API_BASE}/transactions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        })
+        if (res.ok) {
+          setCart([])
+        } else {
+          saveOffline(payload)
+          setCart([])
+        }
       } else {
         saveOffline(payload)
+        setCart([])
       }
-      return
-    }
 
-    saveOffline(payload)
-    setCart([])
+      setCheckoutState('success')
+      setTimeout(() => {
+        setCheckoutState('idle')
+      }, 3000)
+    } catch {
+      setCheckoutState('idle')
+    }
   }
 
   const saveOffline = (payload) => {
@@ -228,6 +236,31 @@ export function App() {
             </div>
           )}
         </section>
+      ) : activeView === 'terminal-info' ? (
+        <section className="panel">
+          <div className="pending-header">
+            <h2>Terminal Info</h2>
+            <button onClick={() => setActiveView('checkout')}>Back to Checkout</button>
+          </div>
+          <div className="terminal-info-grid">
+            <div className="terminal-info-row">
+              <span>Terminal Code</span>
+              <strong>{terminalCode}</strong>
+            </div>
+            <div className="terminal-info-row">
+              <span>Authentication</span>
+              <strong>{token ? 'Signed in' : 'Signed out'}</strong>
+            </div>
+            <div className="terminal-info-row">
+              <span>Network</span>
+              <strong>{networkOnline ? 'Online' : 'Offline'}</strong>
+            </div>
+            <div className="terminal-info-row">
+              <span>Pending Sync</span>
+              <strong>{pendingTransactions.length}</strong>
+            </div>
+          </div>
+        </section>
       ) : (
         <section className="layout">
           <div className="panel">
@@ -272,10 +305,26 @@ export function App() {
             ))}
             <div className="checkout-row">
               <strong>Total: {total.toFixed(2)} SEK</strong>
-              <button onClick={checkout} disabled={!token}>Checkout</button>
+              <button onClick={checkout} disabled={!token || checkoutState === 'processing'}>Checkout</button>
             </div>
           </div>
         </section>
+      )}
+
+      {checkoutState === 'processing' && (
+        <div className="modal-overlay">
+          <div className="modal checkout-modal">
+            <div className="spinner" />
+            <h2>Processing payment</h2>
+            <p>Please wait while we finalize your checkout.</p>
+          </div>
+        </div>
+      )}
+
+      {checkoutState === 'success' && (
+        <div className="toast-success" role="status">
+          Checkout completed successfully.
+        </div>
       )}
 
       {!token && (
