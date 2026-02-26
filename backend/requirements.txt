@@ -1,6 +1,6 @@
 fastapi==0.128.7
 uvicorn==0.40.0
-python-multipart==0.22.0
+python-multipart==0.0.22
 pydantic==2.12.5
 pydantic-settings==2.12.0
 aiosqlite==0.22.1
