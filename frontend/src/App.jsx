@@ -21,6 +21,8 @@ export function App() {
   const [syncCount, setSyncCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState('checkout')
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false)
 
   const pendingTransactions = useMemo(
     () => JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]'),
@@ -42,6 +44,10 @@ export function App() {
           body: JSON.stringify({ current_load: pendingTransactions.length })
         })
         setNetworkOnline(res.ok)
+        if (res.status === 401) {
+          handleUnauthorized()
+          return
+        }
       } catch {
         setNetworkOnline(false)
       }
@@ -77,6 +83,9 @@ export function App() {
         if (res.ok) {
           localStorage.removeItem(OFFLINE_KEY)
           setSyncCount((prev) => prev + 1)
+        } else if (res.status === 401) {
+          handleUnauthorized()
+          return
         }
       } catch {
       }
@@ -109,6 +118,13 @@ export function App() {
     setMenuOpen(false)
     setCart([])
     setActiveView('checkout')
+  }
+
+  const handleUnauthorized = () => {
+    localStorage.removeItem(TOKEN_KEY)
+    setToken('')
+    setCart([])
+    console.warn('Token expired, logged out')
   }
 
   const showTerminalInfo = () => {
@@ -147,6 +163,10 @@ export function App() {
 
   const checkout = async () => {
     if (!cart.length || !token) return
+
+    setCheckoutLoading(true)
+    setCheckoutSuccess(false)
+
     const payload = {
       idempotency_key: crypto.randomUUID(),
       total_amount: Number(total.toFixed(2)),
@@ -155,24 +175,37 @@ export function App() {
     }
 
     if (networkOnline) {
-      const res = await fetch(`${API_BASE}/transactions`, {
+      fetch(`${API_BASE}/transactions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify(payload)
+      }).then((res) => {
+        if (!res.ok) {
+          if (res.status === 401) {
+            handleUnauthorized()
+            return
+          }
+          saveOffline(payload)
+        }
       })
-      if (res.ok) {
-        setCart([])
-      } else {
-        saveOffline(payload)
-      }
-      return
+    } else {
+      saveOffline(payload)
     }
 
-    saveOffline(payload)
-    setCart([])
+    const delay = Math.random() * 500 + 500
+
+    setTimeout(() => {
+      setCheckoutLoading(false)
+      setCheckoutSuccess(true)
+      setCart([])
+
+        setTimeout(() => {
+          setCheckoutSuccess(false)
+        }, 1500)
+    }, delay)
   }
 
   const saveOffline = (payload) => {
@@ -272,10 +305,29 @@ export function App() {
             ))}
             <div className="checkout-row">
               <strong>Total: {total.toFixed(2)} SEK</strong>
-              <button onClick={checkout} disabled={!token}>Checkout</button>
+              <button onClick={checkout} disabled={!token || cart.length === 0}>Checkout</button>
             </div>
           </div>
         </section>
+      )}
+
+      {(checkoutLoading || checkoutSuccess) && (
+        <div className="modal-overlay">
+          <div className="modal checkout-modal">
+            {checkoutLoading && (
+              <>
+                <div className="spinner"></div>
+                <p>Processing your checkout...</p>
+              </>
+            )}
+            {checkoutSuccess && (
+              <>
+                <div className="success-icon">✓</div>
+                <p>Checkout completed successfully!</p>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {!token && (
