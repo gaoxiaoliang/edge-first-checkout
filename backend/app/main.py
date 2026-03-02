@@ -13,6 +13,7 @@ from .models import (
     SyncBatchRequest,
     SyncStatusResponse,
     TerminalCreateRequest,
+    TerminalCreateResponse,
     TerminalResponse,
     TokenResponse,
     TransactionCreateRequest,
@@ -20,6 +21,7 @@ from .models import (
 )
 from .security import (
     create_access_token,
+    generate_terminal_ecdsa_keypair,
     get_current_terminal_code,
     hash_password,
     verify_password,
@@ -47,15 +49,19 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-@app.post("/terminals", response_model=TerminalResponse)
+@app.post("/terminals", response_model=TerminalCreateResponse)
 async def create_terminal(payload: TerminalCreateRequest):
     db = await get_db()
     now = now_iso()
+
+    # Generate ECDSA key pair for this terminal
+    private_key_pem, public_key_pem = generate_terminal_ecdsa_keypair()
+
     try:
         cur = await db.execute(
             """
-            INSERT INTO terminals (terminal_code, password_hash, store_name, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO terminals (terminal_code, password_hash, store_name, created_at, updated_at, ecdsa_private_key, ecdsa_public_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload.terminal_code,
@@ -63,6 +69,8 @@ async def create_terminal(payload: TerminalCreateRequest):
                 payload.store_name,
                 now,
                 now,
+                private_key_pem,
+                public_key_pem,
             ),
         )
         await db.commit()
@@ -75,7 +83,7 @@ async def create_terminal(payload: TerminalCreateRequest):
         raise HTTPException(status_code=409, detail="Terminal already exists") from exc
 
     await db.close()
-    return TerminalResponse(
+    return TerminalCreateResponse(
         id=row["id"],
         terminal_code=row["terminal_code"],
         store_name=row["store_name"],
@@ -85,6 +93,8 @@ async def create_terminal(payload: TerminalCreateRequest):
         if row["last_seen_at"]
         else None,
         status=terminal_status(row["last_seen_at"]),
+        ecdsa_private_key=row["ecdsa_private_key"],
+        ecdsa_public_key=row["ecdsa_public_key"],
     )
 
 
@@ -271,6 +281,7 @@ async def list_terminals() -> list[TerminalResponse]:
             if row["last_seen_at"]
             else None,
             status=terminal_status(row["last_seen_at"]),
+            ecdsa_public_key=row["ecdsa_public_key"],
         )
         for row in rows
     ]
@@ -354,3 +365,46 @@ async def list_transactions(limit: int = 100) -> list[TransactionResponse]:
         )
         for row in rows
     ]
+
+
+@app.get("/dashboard/terminals/{terminal_id}/private-key")
+async def get_terminal_private_key(terminal_id: int) -> dict:
+    """Get the private key for a terminal (dashboard only)"""
+    db = await get_db()
+    row = await (
+        await db.execute(
+            "SELECT ecdsa_private_key FROM terminals WHERE id = ?", (terminal_id,)
+        )
+    ).fetchone()
+    await db.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Terminal not found")
+
+    return {"ecdsa_private_key": row["ecdsa_private_key"]}
+
+
+@app.delete("/dashboard/terminals/{terminal_id}")
+async def delete_terminal(terminal_id: int) -> dict:
+    """Delete a terminal and all its transactions"""
+    db = await get_db()
+
+    # Check if terminal exists
+    row = await (
+        await db.execute("SELECT id FROM terminals WHERE id = ?", (terminal_id,))
+    ).fetchone()
+
+    if not row:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Terminal not found")
+
+    # Delete associated transactions first
+    await db.execute("DELETE FROM transactions WHERE terminal_id = ?", (terminal_id,))
+
+    # Delete the terminal
+    await db.execute("DELETE FROM terminals WHERE id = ?", (terminal_id,))
+
+    await db.commit()
+    await db.close()
+
+    return {"status": "deleted", "terminal_id": terminal_id}

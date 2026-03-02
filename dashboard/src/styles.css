@@ -51,7 +51,127 @@ th, td { border-bottom: 1px solid #e2e8f0; padding: 0.5rem; text-align: left; }
 .online { color: #16a34a; font-weight: 700; }
 .offline { color: #dc2626; font-weight: 700; }
 
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.key-modal h2 {
+  margin-top: 0;
+  color: #16a34a;
+}
+
+.warning-text {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 0.75rem;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.key-info {
+  margin: 1rem 0;
+}
+
+.key-info label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #475569;
+}
+
+.key-info code {
+  display: block;
+  background: #f1f5f9;
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
+.key-textarea {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: #0f172a;
+  color: #4ade80;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem;
+  resize: none;
+  box-sizing: border-box;
+}
+
+.key-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.copy-btn {
+  background: #2563eb;
+  flex: 1;
+}
+
+.copy-btn:hover {
+  background: #1d4ed8;
+}
+
+.dismiss-btn {
+  background: #16a34a;
+  flex: 1;
+}
+
+.dismiss-btn:hover {
+  background: #15803d;
+}
+
+/* Action buttons in table */
+.actions-cell {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+}
+
+.action-btn.copy-btn {
+  background: #2563eb;
+}
+
+.action-btn.copy-btn:hover {
+  background: #1d4ed8;
+}
+
+.action-btn.delete-btn {
+  background: #dc2626;
+}
+
+.action-btn.delete-btn:hover {
+  background: #b91c1c;
+}
+
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .row { flex-direction: column; }
+  .key-actions { flex-direction: column; }
+  .actions-cell { flex-direction: column; }
 }

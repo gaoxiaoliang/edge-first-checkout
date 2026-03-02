@@ -463,3 +463,109 @@ button {
 /* Animation delay utilities */
 .delay-1 { animation-delay: 0.2s; }
 .delay-2 { animation-delay: 0.4s; }
+
+/* Terminal Info Page */
+.terminal-info-panel {
+  max-width: 700px;
+}
+
+.terminal-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.info-item label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.info-value {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.info-value.status-ok {
+  color: #16a34a;
+}
+
+.info-value.status-error {
+  color: #dc2626;
+}
+
+.private-key-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.private-key-section h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.key-description {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+.private-key-input {
+  width: 100%;
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: #0f172a;
+  color: #4ade80;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.75rem;
+  resize: none;
+  box-sizing: border-box;
+}
+
+.private-key-input::placeholder {
+  color: #64748b;
+}
+
+.key-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.save-key-btn {
+  background: #2563eb;
+}
+
+.save-key-btn:hover {
+  background: #1d4ed8;
+}
+
+.key-status {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+@media (max-width: 600px) {
+  .terminal-info-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .key-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

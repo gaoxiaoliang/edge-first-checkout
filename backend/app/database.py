@@ -27,7 +27,9 @@ async def init_db() -> None:
             updated_at TEXT NOT NULL,
             last_seen_at TEXT,
             pending_sync_count INTEGER NOT NULL DEFAULT 0,
-            last_synced_at TEXT
+            last_synced_at TEXT,
+            ecdsa_private_key TEXT,
+            ecdsa_public_key TEXT
         );
 
         CREATE TABLE IF NOT EXISTS transactions (

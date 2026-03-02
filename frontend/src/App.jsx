@@ -19,6 +19,7 @@ const PAYMENT_TYPES = [
 
 const OFFLINE_KEY = 'ica_offline_transactions'
 const TOKEN_KEY = 'ica_token'
+const PRIVATE_KEY_KEY = 'ica_terminal_private_key'
 
 // Generate random credit card number (masked format)
 const generateCardNumber = () => {
@@ -88,6 +89,7 @@ const generatePaymentDetails = (paymentType, totalAmount) => {
 export function App() {
   const [terminalCode, setTerminalCode] = useState('terminal-001')
   const [password, setPassword] = useState('password123')
+  const [privateKey, setPrivateKey] = useState(localStorage.getItem(PRIVATE_KEY_KEY) || '')
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || '')
   const [cart, setCart] = useState([])
   const [networkOnline, setNetworkOnline] = useState(false)
@@ -191,10 +193,27 @@ export function App() {
 
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(PRIVATE_KEY_KEY)
     setToken('')
+    setPrivateKey('')
     setMenuOpen(false)
     setCart([])
     setActiveView('checkout')
+  }
+
+  const goToTerminalInfo = () => {
+    setActiveView('terminal-info')
+    setMenuOpen(false)
+  }
+
+  const savePrivateKey = () => {
+    if (privateKey.trim()) {
+      localStorage.setItem(PRIVATE_KEY_KEY, privateKey)
+      window.alert('Private key saved successfully!')
+    } else {
+      localStorage.removeItem(PRIVATE_KEY_KEY)
+      window.alert('Private key cleared.')
+    }
   }
 
   const handleUnauthorized = () => {
@@ -204,17 +223,7 @@ export function App() {
     console.warn('Token expired, logged out')
   }
 
-  const showTerminalInfo = () => {
-    window.alert(
-      [
-        `Terminal Code: ${terminalCode}`,
-        `Authentication: ${token ? 'Signed in' : 'Signed out'}`,
-        `Network: ${networkOnline ? 'Online' : 'Offline'}`,
-        `Pending Sync: ${pendingTransactions.length}`
-      ].join('\n')
-    )
-    setMenuOpen(false)
-  }
+
 
   const goToPendingTransactions = () => {
     setActiveView('pending')
@@ -336,7 +345,7 @@ export function App() {
               </button>
               {menuOpen && (
                 <div className="menu-dropdown">
-                  <button onClick={showTerminalInfo}>Terminal Info</button>
+                  <button onClick={goToTerminalInfo}>Terminal Info</button>
                   <button onClick={goToPendingTransactions}>
                     Pending Transactions ({pendingTransactions.length})
                   </button>
@@ -348,7 +357,59 @@ export function App() {
         </div>
       </header>
 
-      {activeView === 'pending' ? (
+      {activeView === 'terminal-info' ? (
+        <section className="panel terminal-info-panel">
+          <div className="pending-header">
+            <h2>Terminal Information</h2>
+            <button onClick={() => setActiveView('checkout')}>Back to Checkout</button>
+          </div>
+          
+          <div className="terminal-info-grid">
+            <div className="info-item">
+              <label>Terminal Code</label>
+              <span className="info-value">{terminalCode}</span>
+            </div>
+            <div className="info-item">
+              <label>Authentication</label>
+              <span className={`info-value ${token ? 'status-ok' : 'status-error'}`}>
+                {token ? 'Signed in' : 'Signed out'}
+              </span>
+            </div>
+            <div className="info-item">
+              <label>Network Status</label>
+              <span className={`info-value ${networkOnline ? 'status-ok' : 'status-error'}`}>
+                {networkOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
+            <div className="info-item">
+              <label>Pending Sync</label>
+              <span className="info-value">{pendingTransactions.length} transaction(s)</span>
+            </div>
+          </div>
+
+          <div className="private-key-section">
+            <h3>Terminal Private Key (ECDSA P-256)</h3>
+            <p className="key-description">
+              Enter your terminal's private key here. This key is stored locally and used for signing operations.
+            </p>
+            <textarea
+              value={privateKey}
+              onChange={(e) => setPrivateKey(e.target.value)}
+              placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+              rows={8}
+              className="private-key-input"
+            />
+            <div className="key-actions">
+              <button onClick={savePrivateKey} className="save-key-btn">
+                {privateKey.trim() ? 'Save Private Key' : 'Clear Private Key'}
+              </button>
+              <span className="key-status">
+                {localStorage.getItem(PRIVATE_KEY_KEY) ? 'Key is saved' : 'No key saved'}
+              </span>
+            </div>
+          </div>
+        </section>
+      ) : activeView === 'pending' ? (
         <section className="panel">
           <div className="pending-header">
             <h2>Pending Offline Transactions</h2>

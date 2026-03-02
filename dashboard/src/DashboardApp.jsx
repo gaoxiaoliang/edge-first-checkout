@@ -7,7 +7,7 @@ export function DashboardApp() {
   const [terminals, setTerminals] = useState([])
   const [syncStatus, setSyncStatus] = useState([])
   const [transactions, setTransactions] = useState([])
-  const [newTerminal, setNewTerminal] = useState({ terminal_code: '', password: '', store_name: 'ICA Demo Store' })
+  const [newTerminal, setNewTerminal] = useState({ terminal_code: 'terminal001', password: 'password', store_name: 'ICA Demo Store 001' })
   const [notice, setNotice] = useState('')
 
   const load = async () => {
@@ -44,8 +44,45 @@ export function DashboardApp() {
     }
 
     setNotice('Terminal created successfully.')
-    setNewTerminal({ terminal_code: '', password: '', store_name: newTerminal.store_name })
+    setNewTerminal({ terminal_code: 'terminal001', password: 'password', store_name: 'ICA Demo Store 001' })
     load()
+  }
+
+  const copyPrivateKey = async (terminalId) => {
+    try {
+      const res = await fetch(`${API_BASE}/dashboard/terminals/${terminalId}/private-key`)
+      if (!res.ok) {
+        setNotice('Failed to fetch private key.')
+        return
+      }
+      const data = await res.json()
+      await navigator.clipboard.writeText(data.ecdsa_private_key)
+      setNotice('Private key copied to clipboard!')
+    } catch {
+      setNotice('Failed to copy private key.')
+    }
+  }
+
+  const deleteTerminal = async (terminalId, terminalCode) => {
+    if (!window.confirm(`Are you sure you want to delete terminal "${terminalCode}"? This will also delete all its transactions.`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/dashboard/terminals/${terminalId}`, {
+        method: 'DELETE'
+      })
+
+      if (!res.ok) {
+        setNotice('Failed to delete terminal.')
+        return
+      }
+
+      setNotice(`Terminal "${terminalCode}" deleted successfully.`)
+      load()
+    } catch {
+      setNotice('Failed to delete terminal.')
+    }
   }
 
   return (
@@ -90,7 +127,7 @@ export function DashboardApp() {
         <h2>Terminal Status</h2>
         <table>
           <thead>
-            <tr><th>Terminal</th><th>Store</th><th>Status</th><th>Last Seen</th></tr>
+            <tr><th>Terminal</th><th>Store</th><th>Status</th><th>Last Seen</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {terminals.map((terminal) => (
@@ -99,6 +136,22 @@ export function DashboardApp() {
                 <td>{terminal.store_name}</td>
                 <td className={terminal.status}>{terminal.status}</td>
                 <td>{terminal.last_seen_at || '-'}</td>
+                <td className="actions-cell">
+                  <button 
+                    className="action-btn copy-btn" 
+                    onClick={() => copyPrivateKey(terminal.id)}
+                    title="Copy Private Key"
+                  >
+                    Copy Key
+                  </button>
+                  <button 
+                    className="action-btn delete-btn" 
+                    onClick={() => deleteTerminal(terminal.id, terminal.terminal_code)}
+                    title="Delete Terminal"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -142,6 +195,8 @@ export function DashboardApp() {
           </tbody>
         </table>
       </section>
+
+
     </div>
   )
 }

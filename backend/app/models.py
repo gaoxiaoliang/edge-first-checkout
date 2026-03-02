@@ -66,6 +66,21 @@ class TerminalResponse(BaseModel):
     created_at: datetime
     last_seen_at: datetime | None = None
     status: Literal["online", "offline"]
+    ecdsa_public_key: str | None = None
+
+
+class TerminalCreateResponse(BaseModel):
+    """Response for terminal creation - includes private key (only shown once)"""
+
+    id: int
+    terminal_code: str
+    store_name: str
+    active: bool
+    created_at: datetime
+    last_seen_at: datetime | None = None
+    status: Literal["online", "offline"]
+    ecdsa_private_key: str  # Only returned on creation
+    ecdsa_public_key: str
 
 
 class HeartbeatRequest(BaseModel):

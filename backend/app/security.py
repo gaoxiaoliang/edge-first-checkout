@@ -44,6 +44,32 @@ def get_ecdsa_public_key_pem() -> str:
     return settings.ecdsa_public_key
 
 
+def generate_terminal_ecdsa_keypair() -> tuple[str, str]:
+    """Generate a new ECDSA P-256 (secp256r1) key pair for a terminal.
+
+    Returns:
+        tuple: (private_key_pem, public_key_pem) as strings
+    """
+    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode("utf-8")
+
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
+
+    return private_pem, public_pem
+
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
