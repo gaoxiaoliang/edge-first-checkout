@@ -40,6 +40,8 @@ async def init_db() -> None:
             occurred_at TEXT NOT NULL,
             created_at TEXT NOT NULL,
             synced_from_offline INTEGER NOT NULL DEFAULT 0,
+            payment_type TEXT,
+            payment_details_json TEXT,
             UNIQUE(terminal_id, idempotency_key),
             FOREIGN KEY (terminal_id) REFERENCES terminals(id)
         );

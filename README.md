@@ -2,6 +2,33 @@
 
 Hackathon-ready implementation of an edge-first checkout platform for ICA Sweden.
 
+## Project Background
+
+This project was created for the [Couchbase Edge Resilience Hackathon](https://2hero.dev/hackathons/couchbase-edge-resilience-hackathon).
+
+### Hackathon Format
+
+The hackathon organizers assign multiple participants into teams, along with enterprise personnel who present real business challenges from their companies for the teams to solve.
+
+### Challenge: Always-On Checkout
+
+Our team received a challenge from **ICA** (a major Swedish grocery retailer):
+
+> **Main Problem:**
+> Store customers and cashiers need to complete purchases without interruptions, but network outages can stop checkout operations and cause lost revenue. Today, transaction recording depends on central systems, creating downtime when connectivity fails.
+>
+> **Challenge:**
+> Build an edge-first checkout system that processes transactions locally during outages and automatically syncs with central systems once connectivity returns—ensuring continuous store operations and zero lost sales.
+
+### Solution Approach
+
+We are building an **edge-first, offline-first** checkout system that:
+- Processes transactions locally on edge terminals (self-checkout kiosks)
+- Caches sales data in browser localStorage during network outages
+- Automatically syncs with central backend when connectivity returns
+- Ensures idempotent transaction handling for eventual consistency
+- Provides a dashboard for monitoring terminal health and sync status
+
 ## Technology Choices
 
 ### Frontend (Self-checkout + Dashboard)

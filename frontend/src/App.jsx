@@ -9,8 +9,81 @@ const CATALOG = [
   { id: 'apple', name: 'Swedish Apple (kg)', price: 29.0 }
 ]
 
+const PAYMENT_TYPES = [
+  { id: 'cash', name: 'Cash', icon: '💵', color: '#16a34a' },
+  { id: 'credit_card', name: 'Credit Card', icon: '💳', color: '#2563eb' },
+  { id: 'swish', name: 'Swish', icon: '📱', color: '#7c3aed' },
+  { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', color: '#0f172a' },
+  { id: 'google_pay', name: 'Google Pay', icon: '🔵', color: '#ea580c' }
+]
+
 const OFFLINE_KEY = 'ica_offline_transactions'
 const TOKEN_KEY = 'ica_token'
+
+// Generate random credit card number (masked format)
+const generateCardNumber = () => {
+  const last4 = Math.floor(1000 + Math.random() * 9000)
+  return `****-****-****-${last4}`
+}
+
+// Generate random card type
+const generateCardType = () => {
+  const types = ['Visa', 'Mastercard', 'American Express']
+  return types[Math.floor(Math.random() * types.length)]
+}
+
+// Generate random Swedish phone number for Swish
+const generateSwishPhone = () => {
+  const prefix = '07'
+  const rest = Math.floor(10000000 + Math.random() * 90000000)
+  return `${prefix}${rest}`
+}
+
+// Generate random transaction token
+const generateToken = () => {
+  return crypto.randomUUID().substring(0, 16).toUpperCase()
+}
+
+// Generate payment details based on payment type
+const generatePaymentDetails = (paymentType, totalAmount) => {
+  const payment = { payment_type: paymentType }
+
+  switch (paymentType) {
+    case 'cash': {
+      const roundTo = totalAmount > 100 ? 50 : 10
+      const tendered = Math.ceil(totalAmount / roundTo) * roundTo
+      payment.cash_tendered = tendered
+      payment.cash_change = Number((tendered - totalAmount).toFixed(2))
+      break
+    }
+    case 'credit_card': {
+      payment.credit_card = {
+        card_number: generateCardNumber(),
+        card_type: generateCardType(),
+        expiry_month: Math.floor(1 + Math.random() * 12),
+        expiry_year: 2025 + Math.floor(Math.random() * 5)
+      }
+      break
+    }
+    case 'swish': {
+      payment.swish = {
+        phone_number: generateSwishPhone(),
+        transaction_id: `SWISH-${generateToken()}`
+      }
+      break
+    }
+    case 'apple_pay':
+    case 'google_pay': {
+      payment.mobile_pay = {
+        device_id: `DEV-${generateToken()}`,
+        transaction_token: `TXN-${generateToken()}`
+      }
+      break
+    }
+  }
+
+  return payment
+}
 
 export function App() {
   const [terminalCode, setTerminalCode] = useState('terminal-001')
@@ -23,6 +96,10 @@ export function App() {
   const [activeView, setActiveView] = useState('checkout')
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutSuccess, setCheckoutSuccess] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedPayment, setSelectedPayment] = useState(null)
+  const [paymentProcessing, setPaymentProcessing] = useState(false)
+  const [paymentDetails, setPaymentDetails] = useState(null)
 
   const pendingTransactions = useMemo(
     () => JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]'),
@@ -161,7 +238,34 @@ export function App() {
     setCart((prev) => prev.map((item) => (item.id === id ? { ...item, quantity: value } : item)))
   }
 
-  const checkout = async () => {
+  // Open payment selection modal
+  const initiateCheckout = () => {
+    if (!cart.length || !token) return
+    setShowPaymentModal(true)
+    setSelectedPayment(null)
+    setPaymentDetails(null)
+  }
+
+  // Process payment after selection
+  const processPayment = async (paymentType) => {
+    setSelectedPayment(paymentType)
+    setPaymentProcessing(true)
+
+    // Generate payment details
+    const payment = generatePaymentDetails(paymentType, total)
+    setPaymentDetails(payment)
+
+    // Simulate payment processing delay
+    await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000))
+
+    setPaymentProcessing(false)
+    setShowPaymentModal(false)
+
+    // Now proceed with checkout
+    completeCheckout(payment)
+  }
+
+  const completeCheckout = async (payment) => {
     if (!cart.length || !token) return
 
     setCheckoutLoading(true)
@@ -171,7 +275,8 @@ export function App() {
       idempotency_key: crypto.randomUUID(),
       total_amount: Number(total.toFixed(2)),
       occurred_at: new Date().toISOString(),
-      items: cart.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, quantity }))
+      items: cart.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, quantity })),
+      payment
     }
 
     if (networkOnline) {
@@ -201,10 +306,12 @@ export function App() {
       setCheckoutLoading(false)
       setCheckoutSuccess(true)
       setCart([])
+      setPaymentDetails(payment)
 
-        setTimeout(() => {
-          setCheckoutSuccess(false)
-        }, 1500)
+      setTimeout(() => {
+        setCheckoutSuccess(false)
+        setPaymentDetails(null)
+      }, 2500)
     }, delay)
   }
 
@@ -305,25 +412,125 @@ export function App() {
             ))}
             <div className="checkout-row">
               <strong>Total: {total.toFixed(2)} SEK</strong>
-              <button onClick={checkout} disabled={!token || cart.length === 0}>Checkout</button>
+              <button onClick={initiateCheckout} disabled={!token || cart.length === 0}>Checkout</button>
             </div>
           </div>
         </section>
       )}
 
+      {/* Payment Selection Modal */}
+      {showPaymentModal && (
+        <div className="modal-overlay">
+          <div className="modal payment-modal">
+            {!paymentProcessing ? (
+              <>
+                <h2>Select Payment Method</h2>
+                <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
+                <div className="payment-options">
+                  {PAYMENT_TYPES.map((pt) => (
+                    <button
+                      key={pt.id}
+                      className="payment-option"
+                      style={{ '--payment-color': pt.color }}
+                      onClick={() => processPayment(pt.id)}
+                    >
+                      <span className="payment-icon">{pt.icon}</span>
+                      <span className="payment-name">{pt.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <button className="cancel-payment" onClick={() => setShowPaymentModal(false)}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <div className="payment-processing">
+                <div className="payment-animation" style={{ '--payment-color': PAYMENT_TYPES.find(p => p.id === selectedPayment)?.color }}>
+                  <span className="payment-icon-large">
+                    {PAYMENT_TYPES.find(p => p.id === selectedPayment)?.icon}
+                  </span>
+                  {selectedPayment === 'cash' && (
+                    <div className="cash-animation">
+                      <div className="cash-bill">💵</div>
+                      <div className="cash-bill delay-1">💵</div>
+                      <div className="cash-bill delay-2">💵</div>
+                    </div>
+                  )}
+                  {selectedPayment === 'credit_card' && (
+                    <div className="card-animation">
+                      <div className="card-swipe">💳</div>
+                    </div>
+                  )}
+                  {selectedPayment === 'swish' && (
+                    <div className="swish-animation">
+                      <div className="swish-ring"></div>
+                      <div className="swish-ring delay-1"></div>
+                    </div>
+                  )}
+                  {(selectedPayment === 'apple_pay' || selectedPayment === 'google_pay') && (
+                    <div className="nfc-animation">
+                      <div className="nfc-wave"></div>
+                      <div className="nfc-wave delay-1"></div>
+                      <div className="nfc-wave delay-2"></div>
+                    </div>
+                  )}
+                </div>
+                <p className="processing-text">Processing {PAYMENT_TYPES.find(p => p.id === selectedPayment)?.name}...</p>
+                {paymentDetails?.credit_card && (
+                  <p className="payment-detail">Card: {paymentDetails.credit_card.card_number}</p>
+                )}
+                {paymentDetails?.swish && (
+                  <p className="payment-detail">Phone: {paymentDetails.swish.phone_number}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Checkout Result Modal */}
       {(checkoutLoading || checkoutSuccess) && (
         <div className="modal-overlay">
           <div className="modal checkout-modal">
             {checkoutLoading && (
               <>
                 <div className="spinner"></div>
-                <p>Processing your checkout...</p>
+                <p>Finalizing your order...</p>
               </>
             )}
             {checkoutSuccess && (
               <>
                 <div className="success-icon">✓</div>
-                <p>Checkout completed successfully!</p>
+                <p>Payment successful!</p>
+                {paymentDetails && (
+                  <div className="receipt-info">
+                    <p className="payment-method-used">
+                      Paid with {PAYMENT_TYPES.find(p => p.id === paymentDetails.payment_type)?.name}
+                      {' '}{PAYMENT_TYPES.find(p => p.id === paymentDetails.payment_type)?.icon}
+                    </p>
+                    {paymentDetails.credit_card && (
+                      <p className="receipt-detail">
+                        {paymentDetails.credit_card.card_type} {paymentDetails.credit_card.card_number}
+                      </p>
+                    )}
+                    {paymentDetails.swish && (
+                      <p className="receipt-detail">
+                        Swish from {paymentDetails.swish.phone_number}
+                      </p>
+                    )}
+                    {paymentDetails.cash_tendered && (
+                      <>
+                        <p className="receipt-detail">Cash: {paymentDetails.cash_tendered.toFixed(2)} SEK</p>
+                        <p className="receipt-detail">Change: {paymentDetails.cash_change.toFixed(2)} SEK</p>
+                      </>
+                    )}
+                    {paymentDetails.mobile_pay && (
+                      <p className="receipt-detail">
+                        Token: {paymentDetails.mobile_pay.transaction_token}
+                      </p>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>

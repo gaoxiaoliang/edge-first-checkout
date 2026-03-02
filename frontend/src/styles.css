@@ -227,3 +227,239 @@ button {
   font-size: 24px;
   margin: 0 auto 1rem;
 }
+
+/* Payment Modal Styles */
+.payment-modal {
+  min-width: 360px;
+}
+
+.payment-modal h2 {
+  margin: 0 0 0.5rem;
+  text-align: center;
+}
+
+.payment-total {
+  text-align: center;
+  font-size: 1.25rem;
+  margin-bottom: 1.25rem;
+  color: #475569;
+}
+
+.payment-total strong {
+  color: #0f172a;
+}
+
+.payment-options {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.payment-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.payment-option:hover {
+  border-color: var(--payment-color);
+  background: white;
+  transform: translateX(4px);
+}
+
+.payment-icon {
+  font-size: 1.75rem;
+}
+
+.payment-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.cancel-payment {
+  margin-top: 1rem;
+  width: 100%;
+  background: #64748b;
+}
+
+/* Payment Processing Animation */
+.payment-processing {
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.payment-animation {
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 1.5rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--payment-color) 0%, color-mix(in srgb, var(--payment-color) 70%, white) 100%);
+  border-radius: 50%;
+}
+
+.payment-icon-large {
+  font-size: 3rem;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Cash Animation */
+.cash-animation {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.cash-bill {
+  position: absolute;
+  font-size: 1.5rem;
+  animation: cashDrop 0.8s ease-out infinite;
+}
+
+.cash-bill:nth-child(1) { left: 20%; top: -20px; }
+.cash-bill:nth-child(2) { left: 50%; top: -20px; animation-delay: 0.2s; }
+.cash-bill:nth-child(3) { left: 80%; top: -20px; animation-delay: 0.4s; }
+
+@keyframes cashDrop {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(80px) rotate(15deg); opacity: 0; }
+}
+
+/* Card Swipe Animation */
+.card-animation {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.card-swipe {
+  position: absolute;
+  font-size: 2rem;
+  left: -30px;
+  top: 50%;
+  transform: translateY(-50%);
+  animation: swipe 1.5s ease-in-out infinite;
+}
+
+@keyframes swipe {
+  0% { left: -30px; opacity: 0; }
+  20% { opacity: 1; }
+  50% { left: 50%; transform: translateY(-50%) translateX(-50%); }
+  80% { opacity: 1; }
+  100% { left: 130%; opacity: 0; }
+}
+
+/* Swish Animation */
+.swish-animation {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swish-ring {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border: 3px solid white;
+  border-radius: 50%;
+  animation: swishPulse 1.5s ease-out infinite;
+}
+
+.swish-ring.delay-1 {
+  animation-delay: 0.5s;
+}
+
+@keyframes swishPulse {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* NFC Animation (Apple Pay / Google Pay) */
+.nfc-animation {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nfc-wave {
+  position: absolute;
+  width: 40px;
+  height: 60px;
+  border: 3px solid white;
+  border-left: none;
+  border-radius: 0 50% 50% 0;
+  animation: nfcWave 1.2s ease-out infinite;
+}
+
+.nfc-wave.delay-1 {
+  width: 55px;
+  height: 80px;
+  animation-delay: 0.2s;
+}
+
+.nfc-wave.delay-2 {
+  width: 70px;
+  height: 100px;
+  animation-delay: 0.4s;
+}
+
+@keyframes nfcWave {
+  0% { opacity: 0; transform: scale(0.8); }
+  50% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.2); }
+}
+
+.processing-text {
+  font-size: 1.1rem;
+  color: #475569;
+  margin-bottom: 0.5rem;
+}
+
+.payment-detail {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0.25rem 0;
+}
+
+/* Receipt Info in Success Modal */
+.receipt-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.payment-method-used {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.receipt-detail {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0.25rem 0;
+}
+
+/* Animation delay utilities */
+.delay-1 { animation-delay: 0.2s; }
+.delay-2 { animation-delay: 0.4s; }

@@ -18,7 +18,12 @@ from .models import (
     TransactionCreateRequest,
     TransactionResponse,
 )
-from .security import create_access_token, get_current_terminal_code, hash_password, verify_password
+from .security import (
+    create_access_token,
+    get_current_terminal_code,
+    hash_password,
+    verify_password,
+)
 
 
 @asynccontextmanager
@@ -52,11 +57,19 @@ async def create_terminal(payload: TerminalCreateRequest):
             INSERT INTO terminals (terminal_code, password_hash, store_name, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (payload.terminal_code, hash_password(payload.password), payload.store_name, now, now),
+            (
+                payload.terminal_code,
+                hash_password(payload.password),
+                payload.store_name,
+                now,
+                now,
+            ),
         )
         await db.commit()
         terminal_id = cur.lastrowid
-        row = await (await db.execute("SELECT * FROM terminals WHERE id = ?", (terminal_id,))).fetchone()
+        row = await (
+            await db.execute("SELECT * FROM terminals WHERE id = ?", (terminal_id,))
+        ).fetchone()
     except Exception as exc:
         await db.close()
         raise HTTPException(status_code=409, detail="Terminal already exists") from exc
@@ -68,7 +81,9 @@ async def create_terminal(payload: TerminalCreateRequest):
         store_name=row["store_name"],
         active=bool(row["active"]),
         created_at=datetime.fromisoformat(row["created_at"]),
-        last_seen_at=datetime.fromisoformat(row["last_seen_at"]) if row["last_seen_at"] else None,
+        last_seen_at=datetime.fromisoformat(row["last_seen_at"])
+        if row["last_seen_at"]
+        else None,
         status=terminal_status(row["last_seen_at"]),
     )
 
@@ -85,7 +100,9 @@ async def login(payload: LoginRequest):
     await db.close()
 
     if not row or not verify_password(payload.password, row["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
     if not bool(row["active"]):
         raise HTTPException(status_code=403, detail="Terminal inactive")
 
@@ -107,16 +124,27 @@ async def _resolve_terminal_id(terminal_code: str) -> tuple[int, str]:
     return row["id"], row["terminal_code"]
 
 
-async def _record_transaction(terminal_id: int, payload: TransactionCreateRequest) -> TransactionResponse:
+async def _record_transaction(
+    terminal_id: int, payload: TransactionCreateRequest
+) -> TransactionResponse:
     db = await get_db()
     created_at = now_iso()
     item_count = sum(item.quantity for item in payload.items)
+
+    # Extract payment information
+    payment_type = payload.payment.payment_type if payload.payment else None
+    payment_details_json = (
+        json.dumps(payload.payment.model_dump(), default=str)
+        if payload.payment
+        else None
+    )
+
     try:
         cur = await db.execute(
             """
             INSERT INTO transactions
-            (terminal_id, idempotency_key, total_amount, item_count, payload_json, occurred_at, created_at, synced_from_offline)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (terminal_id, idempotency_key, total_amount, item_count, payload_json, occurred_at, created_at, synced_from_offline, payment_type, payment_details_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 terminal_id,
@@ -127,6 +155,8 @@ async def _record_transaction(terminal_id: int, payload: TransactionCreateReques
                 payload.occurred_at.isoformat(),
                 created_at,
                 1 if payload.offline_created else 0,
+                payment_type,
+                payment_details_json,
             ),
         )
         await db.commit()
@@ -148,9 +178,12 @@ async def _record_transaction(terminal_id: int, payload: TransactionCreateReques
             occurred_at=datetime.fromisoformat(existing["occurred_at"]),
             created_at=datetime.fromisoformat(existing["created_at"]),
             synced_from_offline=bool(existing["synced_from_offline"]),
+            payment_type=existing["payment_type"],
         )
 
-    row = await (await db.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,))).fetchone()
+    row = await (
+        await db.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,))
+    ).fetchone()
     await db.close()
 
     return TransactionResponse(
@@ -162,6 +195,7 @@ async def _record_transaction(terminal_id: int, payload: TransactionCreateReques
         occurred_at=datetime.fromisoformat(row["occurred_at"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         synced_from_offline=bool(row["synced_from_offline"]),
+        payment_type=row["payment_type"],
     )
 
 
@@ -221,7 +255,9 @@ async def heartbeat(
 @app.get("/dashboard/terminals", response_model=list[TerminalResponse])
 async def list_terminals() -> list[TerminalResponse]:
     db = await get_db()
-    rows = await (await db.execute("SELECT * FROM terminals ORDER BY id DESC")).fetchall()
+    rows = await (
+        await db.execute("SELECT * FROM terminals ORDER BY id DESC")
+    ).fetchall()
     await db.close()
 
     return [
@@ -231,7 +267,9 @@ async def list_terminals() -> list[TerminalResponse]:
             store_name=row["store_name"],
             active=bool(row["active"]),
             created_at=datetime.fromisoformat(row["created_at"]),
-            last_seen_at=datetime.fromisoformat(row["last_seen_at"]) if row["last_seen_at"] else None,
+            last_seen_at=datetime.fromisoformat(row["last_seen_at"])
+            if row["last_seen_at"]
+            else None,
             status=terminal_status(row["last_seen_at"]),
         )
         for row in rows
@@ -247,12 +285,18 @@ async def dashboard_stats() -> DashboardStatsResponse:
         )
     ).fetchone()
     offline_row = await (
-        await db.execute("SELECT COUNT(*) AS count FROM transactions WHERE synced_from_offline = 1")
+        await db.execute(
+            "SELECT COUNT(*) AS count FROM transactions WHERE synced_from_offline = 1"
+        )
     ).fetchone()
-    terminals = await (await db.execute("SELECT last_seen_at FROM terminals")).fetchall()
+    terminals = await (
+        await db.execute("SELECT last_seen_at FROM terminals")
+    ).fetchall()
     await db.close()
 
-    online_count = sum(1 for row in terminals if terminal_status(row["last_seen_at"]) == "online")
+    online_count = sum(
+        1 for row in terminals if terminal_status(row["last_seen_at"]) == "online"
+    )
     offline_count = len(terminals) - online_count
 
     return DashboardStatsResponse(
@@ -278,7 +322,9 @@ async def sync_status() -> list[SyncStatusResponse]:
         SyncStatusResponse(
             terminal_code=row["terminal_code"],
             pending_sync_count=row["pending_sync_count"],
-            last_synced_at=datetime.fromisoformat(row["last_synced_at"]) if row["last_synced_at"] else None,
+            last_synced_at=datetime.fromisoformat(row["last_synced_at"])
+            if row["last_synced_at"]
+            else None,
         )
         for row in rows
     ]
@@ -288,7 +334,9 @@ async def sync_status() -> list[SyncStatusResponse]:
 async def list_transactions(limit: int = 100) -> list[TransactionResponse]:
     db = await get_db()
     rows = await (
-        await db.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT ?", (limit,))
+        await db.execute(
+            "SELECT * FROM transactions ORDER BY id DESC LIMIT ?", (limit,)
+        )
     ).fetchall()
     await db.close()
 
@@ -302,6 +350,7 @@ async def list_transactions(limit: int = 100) -> list[TransactionResponse]:
             occurred_at=datetime.fromisoformat(row["occurred_at"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             synced_from_offline=bool(row["synced_from_offline"]),
+            payment_type=row["payment_type"],
         )
         for row in rows
     ]

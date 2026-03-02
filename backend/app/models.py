@@ -4,6 +4,44 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+# Payment type definitions
+PaymentType = Literal["cash", "credit_card", "swish", "apple_pay", "google_pay"]
+
+
+class CreditCardDetails(BaseModel):
+    """Details for credit card payments"""
+
+    card_number: str | None = None  # Masked card number (e.g., "****-****-****-1234")
+    card_type: str | None = None  # Visa, Mastercard, etc.
+    expiry_month: int | None = None
+    expiry_year: int | None = None
+
+
+class SwishDetails(BaseModel):
+    """Details for Swish payments"""
+
+    phone_number: str | None = None  # Swedish phone number
+    transaction_id: str | None = None
+
+
+class MobilePayDetails(BaseModel):
+    """Details for Apple Pay / Google Pay payments"""
+
+    device_id: str | None = None
+    transaction_token: str | None = None
+
+
+class PaymentDetails(BaseModel):
+    """Payment information for a transaction"""
+
+    payment_type: PaymentType
+    credit_card: CreditCardDetails | None = None
+    swish: SwishDetails | None = None
+    mobile_pay: MobilePayDetails | None = None
+    cash_tendered: float | None = None  # For cash payments
+    cash_change: float | None = None  # Change given back
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -47,6 +85,7 @@ class TransactionCreateRequest(BaseModel):
     items: list[TransactionItem]
     occurred_at: datetime
     offline_created: bool = False
+    payment: PaymentDetails | None = None  # Payment information
 
 
 class SyncBatchRequest(BaseModel):
@@ -62,6 +101,7 @@ class TransactionResponse(BaseModel):
     occurred_at: datetime
     created_at: datetime
     synced_from_offline: bool
+    payment_type: PaymentType | None = None  # Payment type used
 
 
 class DashboardStatsResponse(BaseModel):
