@@ -4,3 +4,5 @@ __pycache__/
 edge_checkout.db
 uvicorn.log
 .idea/
+edge_checkout.db-shm
+edge_checkout.db-wal
