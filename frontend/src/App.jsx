@@ -487,8 +487,13 @@ export function App() {
               <>
                 <h2>Select Payment Method</h2>
                 <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
+                {!networkOnline && (
+                  <p className="offline-payment-notice">Offline mode: Only cash payment is available</p>
+                )}
                 <div className="payment-options">
-                  {PAYMENT_TYPES.map((pt) => (
+                  {PAYMENT_TYPES
+                    .filter((pt) => networkOnline || pt.id === 'cash')
+                    .map((pt) => (
                     <button
                       key={pt.id}
                       className="payment-option"
