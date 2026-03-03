@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import QRCode from 'qrcode'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const MOBILE_CHECKOUT_BASE = import.meta.env.VITE_MOBILE_CHECKOUT_BASE || 'http://localhost:8000'
 const CATALOG = [
   { id: 'milk', name: 'ICA Milk 1L', price: 19.9 },
   { id: 'bread', name: 'Sourdough Bread', price: 34.5 },
@@ -17,9 +19,13 @@ const PAYMENT_TYPES = [
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', color: '#ea580c' }
 ]
 
+// Offline-only payment type
+const SCAN_PAY_TYPE = { id: 'scan_pay', name: 'Scan & Pay', icon: '📲', color: '#8b5cf6' }
+
 const OFFLINE_KEY = 'ica_offline_transactions'
 const TOKEN_KEY = 'ica_token'
 const PRIVATE_KEY_KEY = 'ica_terminal_private_key'
+const TERMINAL_CODE_KEY = 'ica_terminal_code'
 
 // Generate random credit card number (masked format)
 const generateCardNumber = () => {
@@ -87,8 +93,8 @@ const generatePaymentDetails = (paymentType, totalAmount) => {
 }
 
 export function App() {
-  const [terminalCode, setTerminalCode] = useState('terminal-001')
-  const [password, setPassword] = useState('password123')
+  const [terminalCode, setTerminalCode] = useState(localStorage.getItem(TERMINAL_CODE_KEY) || 'terminal001')
+  const [password, setPassword] = useState('password')
   const [privateKey, setPrivateKey] = useState(localStorage.getItem(PRIVATE_KEY_KEY) || '')
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || '')
   const [cart, setCart] = useState([])
@@ -102,6 +108,12 @@ export function App() {
   const [selectedPayment, setSelectedPayment] = useState(null)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [paymentDetails, setPaymentDetails] = useState(null)
+  const [scanPayQrCode, setScanPayQrCode] = useState(null) // QR code data URL for Scan & Pay
+  const [scanPayData, setScanPayData] = useState(null) // Data for current Scan & Pay session
+  const [showVerifyModal, setShowVerifyModal] = useState(false) // Show QR scanner modal for verification
+  const [verificationResult, setVerificationResult] = useState(null) // Result of QR verification
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
 
   const pendingTransactions = useMemo(
     () => JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]'),
@@ -188,12 +200,14 @@ export function App() {
 
     const data = await res.json()
     localStorage.setItem(TOKEN_KEY, data.access_token)
+    localStorage.setItem(TERMINAL_CODE_KEY, terminalCode) // Save terminal code for display
     setToken(data.access_token)
   }
 
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(PRIVATE_KEY_KEY)
+    localStorage.removeItem(TERMINAL_CODE_KEY)
     setToken('')
     setPrivateKey('')
     setMenuOpen(false)
@@ -328,6 +342,217 @@ export function App() {
     const queue = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]')
     localStorage.setItem(OFFLINE_KEY, JSON.stringify([...queue, payload]))
     setSyncCount((prev) => prev + 1)
+  }
+
+  // Sign data with terminal private key (ECDSA P-256)
+  const signData = async (data) => {
+    const storedKey = localStorage.getItem(PRIVATE_KEY_KEY)
+    if (!storedKey) {
+      throw new Error('No private key stored. Please add your private key in Terminal Info.')
+    }
+
+    // Import the PEM private key
+    const pemContents = storedKey
+      .replace('-----BEGIN PRIVATE KEY-----', '')
+      .replace('-----END PRIVATE KEY-----', '')
+      .replace(/\s/g, '')
+    
+    const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0))
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      binaryKey,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    )
+
+    // Sign the data
+    const encoder = new TextEncoder()
+    const dataBuffer = encoder.encode(data)
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      cryptoKey,
+      dataBuffer
+    )
+
+    // Convert signature to base64
+    return btoa(String.fromCharCode(...new Uint8Array(signature)))
+  }
+
+  // Generate QR code for Scan & Pay
+  const generateScanPayQrCode = async () => {
+    const storedKey = localStorage.getItem(PRIVATE_KEY_KEY)
+    if (!storedKey) {
+      window.alert('Please add your terminal private key in Terminal Info before using Scan & Pay.')
+      setShowPaymentModal(false)
+      return
+    }
+
+    const idempotencyKey = crypto.randomUUID()
+    const payload = {
+      terminal_code: terminalCode,
+      idempotency_key: idempotencyKey,
+      total_amount: Number(total.toFixed(2)),
+      items: cart.map(({ id, name, price, quantity }) => ({ product_id: id, name, price, quantity })),
+      timestamp: Date.now()
+    }
+
+    const payloadStr = JSON.stringify(payload)
+    
+    try {
+      const signature = await signData(payloadStr)
+      
+      // Create the URL with payload and signature
+      const params = new URLSearchParams({
+        payload: btoa(payloadStr),
+        signature: signature
+      })
+      
+      const url = `${MOBILE_CHECKOUT_BASE}/mobile-checkout?${params.toString()}`
+      
+      // Generate QR code
+      const qrDataUrl = await QRCode.toDataURL(url, {
+        width: 300,
+        margin: 2,
+        color: { dark: '#0f172a', light: '#ffffff' }
+      })
+      
+      setScanPayData({ idempotencyKey, payload })
+      setScanPayQrCode(qrDataUrl)
+    } catch (err) {
+      console.error('Failed to generate QR code:', err)
+      window.alert('Failed to generate QR code. Please check your private key.')
+    }
+  }
+
+  // Process Scan & Pay payment
+  const processScanPay = async () => {
+    setSelectedPayment('scan_pay')
+    setPaymentProcessing(true)
+    await generateScanPayQrCode()
+    setPaymentProcessing(false)
+  }
+
+  // Cancel Scan & Pay and return to payment selection
+  const cancelScanPay = () => {
+    setScanPayQrCode(null)
+    setScanPayData(null)
+    setSelectedPayment(null)
+  }
+
+  // Start QR scanner for verification
+  const startVerificationScanner = async () => {
+    setShowVerifyModal(true)
+    setVerificationResult(null)
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+        scanQRCode()
+      }
+    } catch (err) {
+      console.error('Failed to access camera:', err)
+      setVerificationResult({ success: false, message: 'Failed to access camera' })
+    }
+  }
+
+  // Scan QR code from video stream
+  const scanQRCode = async () => {
+    if (!videoRef.current || !canvasRef.current) return
+    
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    
+    // Dynamic import of jsQR for scanning
+    const jsQR = (await import('jsqr')).default
+    
+    const scan = () => {
+      if (!showVerifyModal || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        requestAnimationFrame(scan)
+        return
+      }
+      
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const code = jsQR(imageData.data, imageData.width, imageData.height)
+      
+      if (code) {
+        verifyPaymentQrCode(code.data)
+      } else {
+        requestAnimationFrame(scan)
+      }
+    }
+    
+    requestAnimationFrame(scan)
+  }
+
+  // Verify the scanned payment QR code
+  const verifyPaymentQrCode = async (qrData) => {
+    try {
+      // Parse the QR data (expected format: JSON with signature from backend)
+      const data = JSON.parse(qrData)
+      
+      // Send to backend for verification
+      const res = await fetch(`${API_BASE}/verify-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      
+      if (res.ok) {
+        const result = await res.json()
+        setVerificationResult({ success: true, message: 'Payment verified!', data: result })
+        
+        // Close scanner after success
+        stopVerificationScanner()
+        
+        // Complete the checkout
+        setTimeout(() => {
+          setScanPayQrCode(null)
+          setScanPayData(null)
+          setShowPaymentModal(false)
+          setShowVerifyModal(false)
+          
+          // Show success
+          setCheckoutSuccess(true)
+          setPaymentDetails({ payment_type: 'scan_pay', verified: true })
+          setCart([])
+          
+          setTimeout(() => {
+            setCheckoutSuccess(false)
+            setPaymentDetails(null)
+            setVerificationResult(null)
+          }, 2500)
+        }, 1500)
+      } else {
+        setVerificationResult({ success: false, message: 'Verification failed' })
+        // Continue scanning
+        scanQRCode()
+      }
+    } catch (err) {
+      console.error('Failed to verify QR code:', err)
+      // Continue scanning on parse error
+      scanQRCode()
+    }
+  }
+
+  // Stop QR scanner
+  const stopVerificationScanner = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks()
+      tracks.forEach(track => track.stop())
+      videoRef.current.srcObject = null
+    }
+    setShowVerifyModal(false)
   }
 
   return (
@@ -483,12 +708,30 @@ export function App() {
       {showPaymentModal && (
         <div className="modal-overlay">
           <div className="modal payment-modal">
-            {!paymentProcessing ? (
+            {scanPayQrCode ? (
+              // Scan & Pay QR Code display
+              <div className="scan-pay-qr">
+                <h2>Scan & Pay</h2>
+                <p className="scan-pay-instruction">Scan this QR code with your phone to complete payment</p>
+                <div className="qr-code-container">
+                  <img src={scanPayQrCode} alt="Payment QR Code" />
+                </div>
+                <p className="scan-pay-hint">After payment, scan the verification code shown on your phone</p>
+                <div className="scan-pay-actions">
+                  <button className="verify-btn" onClick={startVerificationScanner}>
+                    Scan Verification Code
+                  </button>
+                  <button className="cancel-scan-pay" onClick={cancelScanPay}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : !paymentProcessing ? (
               <>
                 <h2>Select Payment Method</h2>
                 <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
                 {!networkOnline && (
-                  <p className="offline-payment-notice">Offline mode: Only cash payment is available</p>
+                  <p className="offline-payment-notice">Offline mode: Cash or Scan & Pay available</p>
                 )}
                 <div className="payment-options">
                   {PAYMENT_TYPES
@@ -504,6 +747,17 @@ export function App() {
                       <span className="payment-name">{pt.name}</span>
                     </button>
                   ))}
+                  {/* Scan & Pay option - only available offline */}
+                  {!networkOnline && (
+                    <button
+                      className="payment-option"
+                      style={{ '--payment-color': SCAN_PAY_TYPE.color }}
+                      onClick={processScanPay}
+                    >
+                      <span className="payment-icon">{SCAN_PAY_TYPE.icon}</span>
+                      <span className="payment-name">{SCAN_PAY_TYPE.name}</span>
+                    </button>
+                  )}
                 </div>
                 <button className="cancel-payment" onClick={() => setShowPaymentModal(false)}>
                   Cancel
@@ -599,6 +853,31 @@ export function App() {
                 )}
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* QR Verification Scanner Modal */}
+      {showVerifyModal && (
+        <div className="modal-overlay">
+          <div className="modal verify-modal">
+            <h2>Scan Verification Code</h2>
+            <p>Point camera at the verification QR code on customer's phone</p>
+            <div className="scanner-container">
+              <video ref={videoRef} className="scanner-video" playsInline />
+              <canvas ref={canvasRef} style={{ display: 'none' }} />
+              <div className="scanner-overlay">
+                <div className="scanner-frame"></div>
+              </div>
+            </div>
+            {verificationResult && (
+              <div className={`verification-result ${verificationResult.success ? 'success' : 'error'}`}>
+                {verificationResult.message}
+              </div>
+            )}
+            <button className="cancel-verify" onClick={stopVerificationScanner}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
