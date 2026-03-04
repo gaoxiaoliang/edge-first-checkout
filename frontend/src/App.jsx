@@ -117,6 +117,10 @@ export function App() {
   const [scanPayData, setScanPayData] = useState(null) // Data for current Scan & Pay session
   const [showVerifyModal, setShowVerifyModal] = useState(false) // Show QR scanner modal for verification
   const [verificationResult, setVerificationResult] = useState(null) // Result of QR verification
+  const [pastedImage, setPastedImage] = useState(null) // User pasted image for verification
+  const [parsedQrData, setParsedQrData] = useState(null) // Parsed QR data from pasted image
+  const [verifyErrorModal, setVerifyErrorModal] = useState(false) // Show verification error modal
+  const [verifySuccessModal, setVerifySuccessModal] = useState(false) // Show verification success modal
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -626,7 +630,7 @@ export function App() {
       
       if (!signature) {
         setVerificationResult({ success: false, message: 'Invalid QR code: missing signature' })
-        scanQRCode()
+        setVerifyErrorModal(true)
         return
       }
 
@@ -634,7 +638,7 @@ export function App() {
       const storedKey = localStorage.getItem(SYSTEM_PUBLIC_KEY_KEY)
       if (!storedKey) {
         setVerificationResult({ success: false, message: 'System public key not configured. Please add it in Terminal Info.' })
-        scanQRCode()
+        setVerifyErrorModal(true)
         return
       }
 
@@ -670,58 +674,31 @@ export function App() {
       
       if (!isValid) {
         setVerificationResult({ success: false, message: 'Invalid signature - payment verification failed' })
-        scanQRCode()
+        setVerifyErrorModal(true)
         return
       }
 
       // Check payment status from QR data
       if (verifyData.payment_status !== 'completed') {
         setVerificationResult({ success: false, message: 'Payment not completed yet' })
-        scanQRCode()
+        setVerifyErrorModal(true)
         return
       }
 
       // Verify terminal code matches current terminal
       if (verifyData.terminal_code !== terminalCode) {
         setVerificationResult({ success: false, message: 'This payment is for a different terminal' })
-        scanQRCode()
+        setVerifyErrorModal(true)
         return
       }
 
       // Verification successful!
       setVerificationResult({ success: true, message: 'Payment verified!', data: verifyData })
-      
-      // Close scanner after success
-      stopVerificationScanner()
-      
-      // Complete the checkout
-      setTimeout(() => {
-        setScanPayQrCode(null)
-        setScanPayData(null)
-        setShowPaymentModal(false)
-        setShowVerifyModal(false)
-        
-        // Show success
-        setCheckoutSuccess(true)
-        setPaymentDetails({ 
-          payment_type: 'scan_pay', 
-          verified: true,
-          tx_id: verifyData.tx_id,
-          total_amount: verifyData.total_amount
-        })
-        setCart([])
-        
-        setTimeout(() => {
-          setCheckoutSuccess(false)
-          setPaymentDetails(null)
-          setVerificationResult(null)
-        }, 2500)
-      }, 1500)
+      setVerifySuccessModal(true)
     } catch (err) {
       console.error('Failed to verify QR code:', err)
       setVerificationResult({ success: false, message: `Verification error: ${err.message}` })
-      // Continue scanning on error
-      scanQRCode()
+      setVerifyErrorModal(true)
     }
   }
 
@@ -733,6 +710,77 @@ export function App() {
       videoRef.current.srcObject = null
     }
     setShowVerifyModal(false)
+    setPastedImage(null)
+    setParsedQrData(null)
+  }
+
+  // Handle paste image event
+  const handlePasteImage = async (e) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (!file) continue
+
+        const reader = new FileReader()
+        reader.onload = async (event) => {
+          const dataUrl = event.target?.result
+          if (typeof dataUrl !== 'string') return
+
+          setPastedImage(dataUrl)
+
+          try {
+            const jsQR = (await import('jsqr')).default
+
+            const img = new Image()
+            img.onload = () => {
+              const canvas = document.createElement('canvas')
+              canvas.width = img.width
+              canvas.height = img.height
+              const ctx = canvas.getContext('2d')
+              ctx.drawImage(img, 0, 0)
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+              const code = jsQR(imageData.data, imageData.width, imageData.height)
+
+              if (code) {
+                try {
+                  const qrData = JSON.parse(code.data)
+                  setParsedQrData(qrData)
+                } catch (parseErr) {
+                  console.error('Failed to parse QR data:', parseErr)
+                  setVerificationResult({ success: false, message: 'Invalid QR code format' })
+                }
+              } else {
+                setVerificationResult({ success: false, message: 'No QR code found in image' })
+              }
+            }
+            img.src = dataUrl
+          } catch (err) {
+            console.error('Failed to process image:', err)
+            setVerificationResult({ success: false, message: 'Failed to process image' })
+          }
+        }
+        reader.readAsDataURL(file)
+        break
+      }
+    }
+  }
+
+  // Clear pasted image
+  const clearPastedImage = () => {
+    setPastedImage(null)
+    setParsedQrData(null)
+    setVerificationResult(null)
+  }
+
+  // Verify pasted image QR data
+  const verifyPastedImage = async () => {
+    if (!parsedQrData) return
+
+    const qrData = JSON.stringify(parsedQrData)
+    await verifyPaymentQrCode(qrData)
   }
 
   // Handle uploaded QR code image
@@ -1137,35 +1185,109 @@ export function App() {
       {showVerifyModal && (
         <div className="modal-overlay">
           <div className="modal verify-modal">
-            <h2>Scan Verification Code</h2>
-            <p>Point camera at the verification QR code on customer's phone</p>
-            <div className="scanner-container">
-              <video ref={videoRef} className="scanner-video" playsInline />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
-              <div className="scanner-overlay">
-                <div className="scanner-frame"></div>
-              </div>
+            <h2>Paste Verification Code</h2>
+            <p>Press Ctrl+V to paste the verification QR code screenshot from customer's phone</p>
+            
+            <div 
+              className="paste-image-container"
+              onPaste={handlePasteImage}
+              tabIndex={0}
+            >
+              {pastedImage ? (
+                <img src={pastedImage} alt="Pasted verification QR code" className="pasted-image" />
+              ) : (
+                <div className="paste-placeholder">
+                  <span className="paste-icon">📋</span>
+                  <span>Paste image here (Ctrl+V)</span>
+                </div>
+              )}
             </div>
-            {verificationResult && (
-              <div className={`verification-result ${verificationResult.success ? 'success' : 'error'}`}>
-                {verificationResult.message}
+
+            {parsedQrData && (
+              <div className="parsed-qr-data">
+                <h3>QR Code Data:</h3>
+                {Object.entries(parsedQrData).map(([key, value]) => (
+                  <div key={key} className="qr-data-row">
+                    <span className="qr-data-key">{key}:</span>
+                    <span className="qr-data-value">
+                      {typeof value === 'string' && value.length > 30 
+                        ? value.substring(0, 30) + '...' 
+                        : JSON.stringify(value)}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
+
             <div className="verify-actions">
-              <button className="upload-qr-btn" onClick={openQrImagePicker}>
-                Upload QR Image
+              <button 
+                className="verify-btn" 
+                onClick={verifyPastedImage}
+                disabled={!parsedQrData}
+              >
+                Verify
+              </button>
+              <button className="clear-paste-btn" onClick={clearPastedImage}>
+                Clear
               </button>
               <button className="cancel-verify" onClick={stopVerificationScanner}>
                 Cancel
               </button>
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleQrImageUpload}
-              style={{ display: 'none' }}
-            />
+          </div>
+        </div>
+      )}
+
+      {/* Verification Error Modal */}
+      {verifyErrorModal && verificationResult && (
+        <div className="modal-overlay">
+          <div className="modal error-modal">
+            <div className="error-icon">✕</div>
+            <h2>Verification Failed</h2>
+            <p className="error-message">{verificationResult.message}</p>
+            <button className="close-error-btn" onClick={() => setVerifyErrorModal(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Success Modal */}
+      {verifySuccessModal && verificationResult && (
+        <div className="modal-overlay">
+          <div className="modal success-modal">
+            <div className="success-icon">✓</div>
+            <h2>Verification Successful!</h2>
+            <div className="success-details">
+              <p><strong>Transaction ID:</strong> {verificationResult.data?.tx_id}</p>
+              <p><strong>Terminal:</strong> {verificationResult.data?.terminal_code}</p>
+              <p><strong>Amount:</strong> {verificationResult.data?.total_amount} SEK</p>
+              <p><strong>Status:</strong> {verificationResult.data?.payment_status}</p>
+            </div>
+            <button className="close-success-btn" onClick={() => {
+              setVerifySuccessModal(false)
+              setShowVerifyModal(false)
+              setPastedImage(null)
+              setParsedQrData(null)
+              setScanPayQrCode(null)
+              setScanPayData(null)
+              setShowPaymentModal(false)
+              setCheckoutSuccess(true)
+              setPaymentDetails({ 
+                payment_type: 'scan_pay', 
+                verified: true,
+                tx_id: verificationResult.data?.tx_id,
+                total_amount: verificationResult.data?.total_amount
+              })
+              setCart([])
+              setTimeout(() => {
+                setCheckoutSuccess(false)
+                setPaymentDetails(null)
+                setVerificationResult(null)
+              }, 2500)
+            }}>
+              Close
+            </button>
           </div>
         </div>
       )}
