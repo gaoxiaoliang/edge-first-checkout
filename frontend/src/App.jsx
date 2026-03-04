@@ -115,6 +115,7 @@ export function App() {
   const [scanPayQrCode, setScanPayQrCode] = useState(null) // QR code data URL for Scan & Pay
   const [scanPayUrl, setScanPayUrl] = useState(null) // URL for Scan & Pay (for copy button)
   const [scanPayData, setScanPayData] = useState(null) // Data for current Scan & Pay session
+  const [copyLinkCopied, setCopyLinkCopied] = useState(false) // Copy Link button state
   const [showVerifyModal, setShowVerifyModal] = useState(false) // Show QR scanner modal for verification
   const [verificationResult, setVerificationResult] = useState(null) // Result of QR verification
   const [pastedImage, setPastedImage] = useState(null) // User pasted image for verification
@@ -563,7 +564,10 @@ export function App() {
   const copyScanPayUrl = async () => {
     if (scanPayUrl) {
       await navigator.clipboard.writeText(scanPayUrl)
-      window.alert('Link copied to clipboard!')
+      setCopyLinkCopied(true)
+      setTimeout(() => {
+        setCopyLinkCopied(false)
+      }, 3000)
     }
   }
 
@@ -1036,7 +1040,7 @@ export function App() {
                   <div className="scan-pay-url-container">
                     <p className="scan-pay-url">{scanPayUrl}</p>
                     <button className="copy-url-btn" onClick={copyScanPayUrl}>
-                      Copy Link
+                      {copyLinkCopied ? 'Copied' : 'Copy Link'}
                     </button>
                   </div>
                 )}
@@ -1212,7 +1216,7 @@ export function App() {
                     <span className="qr-data-value">
                       {typeof value === 'string' && value.length > 30 
                         ? value.substring(0, 30) + '...' 
-                        : JSON.stringify(value)}
+                        : String(value)}
                     </span>
                   </div>
                 ))}
@@ -1272,7 +1276,6 @@ export function App() {
               setScanPayQrCode(null)
               setScanPayData(null)
               setShowPaymentModal(false)
-              setCheckoutSuccess(true)
               setPaymentDetails({ 
                 payment_type: 'scan_pay', 
                 verified: true,
@@ -1280,11 +1283,7 @@ export function App() {
                 total_amount: verificationResult.data?.total_amount
               })
               setCart([])
-              setTimeout(() => {
-                setCheckoutSuccess(false)
-                setPaymentDetails(null)
-                setVerificationResult(null)
-              }, 2500)
+              setVerificationResult(null)
             }}>
               Close
             </button>
