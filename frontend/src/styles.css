@@ -158,6 +158,11 @@ header h1 {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   border-color: var(--ica-red-light);
+  background: var(--ica-surface);
+}
+
+.product-card:hover:not(:disabled) {
+  background: var(--ica-surface);
 }
 
 .product-card:disabled,
