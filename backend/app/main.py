@@ -858,12 +858,11 @@ def _cart_html(
         <title>ICA Mobile Checkout</title>
         <style>
             * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #ea580c 0%, #dc2626 100%); min-height: 100vh; padding: 1rem; }}
-            .container {{ max-width: 500px; margin: 0 auto; }}
-            .header {{ text-align: center; color: white; padding: 1.5rem 0; }}
-            .header h1 {{ font-size: 1.5rem; margin-bottom: 0.25rem; }}
-            .header p {{ opacity: 0.9; font-size: 0.875rem; }}
-            .cart-card {{ background: white; border-radius: 16px; padding: 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }}
+            .card {{ background: white; border-radius: 16px; padding: 2rem; max-width: 400px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }}
+            .header {{ text-align: center; margin-bottom: 1.5rem; }}
+            .header h1 {{ font-size: 1.5rem; color: #ea580c; margin-bottom: 0.25rem; }}
+            .header p {{ opacity: 0.8; font-size: 0.875rem; color: #64748b; }}
             .cart-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; }}
             .cart-header h2 {{ font-size: 1.125rem; color: #0f172a; }}
             .terminal-badge {{ background: #f1f5f9; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; color: #64748b; }}
@@ -916,25 +915,23 @@ def _cart_html(
         </style>
     </head>
     <body>
-        <div class="container">
+        <div class="card">
             <div class="header">
                 <h1>🛒 ICA Mobile Checkout</h1>
                 <p>Complete your purchase</p>
             </div>
-            <div class="cart-card">
-                <div class="cart-header">
-                    <h2>Your Cart</h2>
-                    <span class="terminal-badge">{terminal_code}</span>
-                </div>
-                <div class="cart-items">
-                    {items_html}
-                </div>
-                <div class="total-row">
-                    <span class="total-label">Total</span>
-                    <span class="total-amount">{total:.2f} SEK</span>
-                </div>
-                {action_html}
+            <div class="cart-header">
+                <h2>Your Cart</h2>
+                <span class="terminal-badge">{terminal_code}</span>
             </div>
+            <div class="cart-items">
+                {items_html}
+            </div>
+            <div class="total-row">
+                <span class="total-label">Total</span>
+                <span class="total-amount">{total:.2f} SEK</span>
+            </div>
+            {action_html}
         </div>
         <div class="swish-modal">
             <div class="swish-animation">
