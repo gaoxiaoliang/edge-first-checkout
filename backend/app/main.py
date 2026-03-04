@@ -748,25 +748,74 @@ def _cart_html(
         """
     else:
         action_html = f"""
-        <button class="pay-btn" onclick="processPayment()">
+        <button class="pay-btn" onclick="launchSwish()">
             Pay with Swish 📱
         </button>
         <script>
-            async function processPayment() {{
+            // Step 1: Show "launching Swish" animation
+            function launchSwish() {{
                 const btn = document.querySelector('.pay-btn');
                 btn.disabled = true;
-                btn.textContent = 'Processing...';
+                btn.textContent = 'Opening Swish...';
                 
-                // Show Swish animation
-                document.querySelector('.swish-modal').style.display = 'flex';
+                // Show launching animation
+                const modal = document.querySelector('.swish-modal');
+                modal.style.display = 'flex';
+                modal.innerHTML = `
+                    <div class="swish-launching">
+                        <div class="swish-logo">📱</div>
+                        <div class="swish-rings">
+                            <div class="swish-ring"></div>
+                            <div class="swish-ring delay-1"></div>
+                            <div class="swish-ring delay-2"></div>
+                        </div>
+                        <h2>Opening Swish App...</h2>
+                        <p class="swish-hint">Please complete payment in Swish</p>
+                    </div>
+                `;
                 
-                // Simulate Swish payment delay
-                await new Promise(r => setTimeout(r, 2000));
+                // After 2.5 seconds, show confirmation UI
+                setTimeout(() => {{
+                    showConfirmation();
+                }}, 2500);
+            }}
+            
+            // Step 2: Show confirmation UI
+            function showConfirmation() {{
+                const modal = document.querySelector('.swish-modal');
+                modal.innerHTML = `
+                    <div class="swish-confirm">
+                        <div class="swish-confirm-icon">✓</div>
+                        <h2>Payment Completed in Swish?</h2>
+                        <p class="swish-confirm-hint">Click the button below after you have completed the payment in Swish app</p>
+                        <button class="confirm-btn" onclick="confirmPayment()">
+                            I've Completed Payment
+                        </button>
+                        <button class="cancel-btn" onclick="cancelPayment()">
+                            Cancel
+                        </button>
+                    </div>
+                `;
+            }}
+            
+            // Step 3: Process payment after user confirmation
+            async function confirmPayment() {{
+                const modal = document.querySelector('.swish-modal');
+                modal.innerHTML = `
+                    <div class="swish-animation">
+                        <div class="swish-spinner"></div>
+                        <h2>Verifying Payment...</h2>
+                        <p>Please wait</p>
+                    </div>
+                `;
+                
+                // Simulate verification delay
+                await new Promise(r => setTimeout(r, 1500));
                 
                 try {{
                     const res = await fetch('/mobile-checkout/{tx_id}/pay', {{ method: 'POST' }});
                     if (res.ok) {{
-                        document.querySelector('.swish-modal').innerHTML = `
+                        modal.innerHTML = `
                             <div class="swish-success">
                                 <div class="success-icon">✓</div>
                                 <h2>Payment Successful!</h2>
@@ -777,17 +826,25 @@ def _cart_html(
                             window.location.href = '/mobile-checkout/{tx_id}/verification';
                         }}, 1500);
                     }} else {{
-                        alert('Payment failed. Please try again.');
-                        btn.disabled = false;
-                        btn.textContent = 'Pay with Swish 📱';
-                        document.querySelector('.swish-modal').style.display = 'none';
+                        alert('Payment verification failed. Please try again.');
+                        resetPayment();
                     }}
                 }} catch (e) {{
                     alert('Network error. Please try again.');
-                    btn.disabled = false;
-                    btn.textContent = 'Pay with Swish 📱';
-                    document.querySelector('.swish-modal').style.display = 'none';
+                    resetPayment();
                 }}
+            }}
+            
+            // Cancel payment and reset
+            function cancelPayment() {{
+                resetPayment();
+            }}
+            
+            function resetPayment() {{
+                const btn = document.querySelector('.pay-btn');
+                btn.disabled = false;
+                btn.textContent = 'Pay with Swish 📱';
+                document.querySelector('.swish-modal').style.display = 'none';
             }}
         </script>
         """
@@ -827,13 +884,35 @@ def _cart_html(
             .check-icon {{ width: 60px; height: 60px; background: #16a34a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 1rem; }}
             .paid-notice p {{ color: #16a34a; font-weight: 600; font-size: 1.25rem; margin-bottom: 1rem; }}
             .verify-link {{ display: inline-block; padding: 0.75rem 1.5rem; background: #0f172a; color: white; text-decoration: none; border-radius: 8px; font-weight: 500; }}
-            .swish-modal {{ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }}
+            .swish-modal {{ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; z-index: 100; }}
             .swish-animation {{ text-align: center; color: white; }}
             .swish-animation h2 {{ margin-bottom: 1rem; }}
             .swish-spinner {{ width: 80px; height: 80px; border: 4px solid rgba(255,255,255,0.3); border-top-color: #7c3aed; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }}
             @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
             .swish-success {{ text-align: center; }}
             .success-icon {{ width: 80px; height: 80px; background: #16a34a; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin: 0 auto 1rem; }}
+            
+            /* Swish launching animation */
+            .swish-launching {{ text-align: center; color: white; position: relative; }}
+            .swish-launching h2 {{ margin-bottom: 0.5rem; font-size: 1.5rem; }}
+            .swish-hint {{ opacity: 0.8; font-size: 0.875rem; }}
+            .swish-logo {{ font-size: 4rem; margin-bottom: 1rem; animation: bounce 1s ease-in-out infinite; }}
+            @keyframes bounce {{ 0%, 100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-10px); }} }}
+            .swish-rings {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 200px; height: 200px; pointer-events: none; }}
+            .swish-ring {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100px; height: 100px; border: 3px solid rgba(124, 58, 237, 0.6); border-radius: 50%; animation: ripple 1.5s ease-out infinite; }}
+            .swish-ring.delay-1 {{ animation-delay: 0.5s; }}
+            .swish-ring.delay-2 {{ animation-delay: 1s; }}
+            @keyframes ripple {{ 0% {{ width: 100px; height: 100px; opacity: 1; }} 100% {{ width: 200px; height: 200px; opacity: 0; }} }}
+            
+            /* Swish confirmation UI */
+            .swish-confirm {{ text-align: center; color: white; padding: 2rem; max-width: 320px; }}
+            .swish-confirm-icon {{ width: 80px; height: 80px; background: #7c3aed; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; margin: 0 auto 1.5rem; border: 3px solid rgba(255,255,255,0.3); }}
+            .swish-confirm h2 {{ margin-bottom: 0.75rem; font-size: 1.375rem; }}
+            .swish-confirm-hint {{ opacity: 0.85; font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.5; }}
+            .confirm-btn {{ width: 100%; padding: 1rem; background: #16a34a; color: white; border: none; border-radius: 12px; font-size: 1.125rem; font-weight: 600; cursor: pointer; margin-bottom: 0.75rem; }}
+            .confirm-btn:hover {{ background: #15803d; }}
+            .cancel-btn {{ width: 100%; padding: 0.875rem; background: transparent; color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.3); border-radius: 12px; font-size: 1rem; cursor: pointer; }}
+            .cancel-btn:hover {{ background: rgba(255,255,255,0.1); }}
         </style>
     </head>
     <body>
