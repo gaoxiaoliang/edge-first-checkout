@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import QRCode from 'qrcode'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
-const MOBILE_CHECKOUT_BASE = import.meta.env.VITE_MOBILE_CHECKOUT_BASE || 'http://localhost:8000'
+const MOBILE_CHECKOUT_BASE = import.meta.env.VITE_MOBILE_CHECKOUT_BASE || 'http://192.168.1.103:8000'
 const CATALOG = [
   { id: 'milk', name: 'ICA Milk 1L', price: 19.9 },
   { id: 'bread', name: 'Sourdough Bread', price: 34.5 },
@@ -98,7 +98,9 @@ export function App() {
   const [privateKey, setPrivateKey] = useState(localStorage.getItem(PRIVATE_KEY_KEY) || '')
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || '')
   const [cart, setCart] = useState([])
-  const [networkOnline, setNetworkOnline] = useState(false)
+  const [realNetworkOnline, setRealNetworkOnline] = useState(false)  // 真实网络状态
+  const [forceOffline, setForceOffline] = useState(false)  // 强制离线模式
+  const networkOnline = realNetworkOnline && !forceOffline  // 最终使用的网络状态
   const [syncCount, setSyncCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState('checkout')
@@ -134,13 +136,13 @@ export function App() {
           },
           body: JSON.stringify({ current_load: pendingTransactions.length })
         })
-        setNetworkOnline(res.ok)
+        setRealNetworkOnline(res.ok)  // 更新真实网络状态
         if (res.status === 401) {
           handleUnauthorized()
           return
         }
       } catch {
-        setNetworkOnline(false)
+        setRealNetworkOnline(false)  // 更新真实网络状态
       }
     }
 
@@ -151,7 +153,7 @@ export function App() {
 
   useEffect(() => {
     if (!token) {
-      setNetworkOnline(false)
+      setRealNetworkOnline(false)
     }
   }, [token])
 
@@ -562,7 +564,17 @@ export function App() {
         <div className="header-actions">
           <span className={networkOnline ? 'status online' : 'status offline'}>
             {networkOnline ? 'Network: Online' : 'Network: Offline'}
+            {forceOffline && ' (Simulated)'}
           </span>
+          {realNetworkOnline && (
+            <button
+              className="force-offline-btn"
+              onClick={() => setForceOffline((prev) => !prev)}
+              title={forceOffline ? 'Exit simulated offline mode' : 'Enter simulated offline mode'}
+            >
+              {forceOffline ? 'Exit Offline Mode' : 'Simulate Offline'}
+            </button>
+          )}
           {token && (
             <div className="menu-wrap">
               <button className="menu-button" onClick={() => setMenuOpen((prev) => !prev)}>
