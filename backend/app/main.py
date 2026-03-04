@@ -270,6 +270,12 @@ async def heartbeat(
     return {"status": "alive"}
 
 
+@app.get("/dashboard/system-public-key")
+async def get_system_public_key() -> dict:
+    """Get the system ECDSA public key for terminal to verify payment QR codes."""
+    return {"ecdsa_public_key": settings.ecdsa_public_key}
+
+
 @app.get("/dashboard/terminals", response_model=list[TerminalResponse])
 async def list_terminals() -> list[TerminalResponse]:
     db = await get_db()
@@ -565,7 +571,7 @@ async def mobile_checkout(
     # Check if transaction already exists
     existing = await (
         await db.execute(
-            "SELECT id, payment_status FROM mobile_transactions WHERE terminal_id = ? AND idempotency_key = ?",
+            "SELECT id, payment_status FROM transactions WHERE terminal_id = ? AND idempotency_key = ?",
             (terminal_id, idempotency_key),
         )
     ).fetchone()
@@ -574,13 +580,22 @@ async def mobile_checkout(
         tx_id = existing["id"]
         payment_status = existing["payment_status"]
     else:
-        # Create new mobile transaction
+        # Create new transaction with pending status
+        item_count = sum(item.get("quantity", 1) for item in items)
         cur = await db.execute(
             """
-            INSERT INTO mobile_transactions (terminal_id, idempotency_key, total_amount, items_json, payment_status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)
+            INSERT INTO transactions (terminal_id, idempotency_key, total_amount, item_count, payload_json, occurred_at, created_at, payment_type, payment_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'scan_pay', 'pending')
             """,
-            (terminal_id, idempotency_key, total_amount, json.dumps(items), now_iso()),
+            (
+                terminal_id,
+                idempotency_key,
+                total_amount,
+                item_count,
+                json.dumps(items),
+                now_iso(),
+                now_iso(),
+            ),
         )
         await db.commit()
         tx_id = cur.lastrowid
@@ -602,20 +617,20 @@ async def process_mobile_payment(tx_id: int):
     db = await get_db()
 
     row = await (
-        await db.execute("SELECT * FROM mobile_transactions WHERE id = ?", (tx_id,))
+        await db.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,))
     ).fetchone()
 
     if not row:
         await db.close()
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    if row["payment_status"] == "paid":
+    if row["payment_status"] == "completed":
         await db.close()
         return {"status": "already_paid", "tx_id": tx_id}
 
-    # Update payment status
+    # Update payment status to completed
     await db.execute(
-        "UPDATE mobile_transactions SET payment_status = 'paid', paid_at = ? WHERE id = ?",
+        "UPDATE transactions SET payment_status = 'completed', paid_at = ? WHERE id = ?",
         (now_iso(), tx_id),
     )
     await db.commit()
@@ -631,10 +646,10 @@ async def get_verification_page(tx_id: int):
 
     row = await (
         await db.execute(
-            """SELECT mt.*, t.terminal_code 
-               FROM mobile_transactions mt 
-               JOIN terminals t ON mt.terminal_id = t.id 
-               WHERE mt.id = ?""",
+            """SELECT tx.*, t.terminal_code 
+               FROM transactions tx 
+               JOIN terminals t ON tx.terminal_id = t.id 
+               WHERE tx.id = ?""",
             (tx_id,),
         )
     ).fetchone()
@@ -654,93 +669,20 @@ async def get_verification_page(tx_id: int):
         "idempotency_key": row["idempotency_key"],
         "total_amount": row["total_amount"],
         "payment_status": row["payment_status"],
-        "verified": row["verified"] == 1 if row["verified"] else False,
     }
 
     # Sign the verification data
     verification_str = json.dumps(verification_data, sort_keys=True)
+    print(f"[DEBUG] Verification data to sign: {verification_str}")
+    print(
+        f"[DEBUG] System public key (first 50 chars): {settings.ecdsa_public_key[27:77]}"
+    )
     signature = sign_with_system_key(verification_str)
+    print(f"[DEBUG] Generated signature: {signature}")
 
     verification_data["signature"] = signature
 
     return HTMLResponse(content=_verification_html(verification_data))
-
-
-@app.post("/verify-payment")
-async def verify_payment(data: dict):
-    """Verify payment QR code scanned by terminal"""
-    tx_id = data.get("tx_id")
-    signature = data.get("signature")
-
-    if not tx_id or not signature:
-        raise HTTPException(status_code=400, detail="Missing tx_id or signature")
-
-    # Recreate the data that was signed (without signature)
-    verify_data = {k: v for k, v in data.items() if k != "signature"}
-    verify_str = json.dumps(verify_data, sort_keys=True)
-
-    # Verify with system public key
-    public_key_pem = settings.ecdsa_public_key
-    if not verify_ecdsa_signature(public_key_pem, verify_str, signature):
-        raise HTTPException(status_code=403, detail="Invalid signature")
-
-    # Check payment status
-    db = await get_db()
-    row = await (
-        await db.execute("SELECT * FROM mobile_transactions WHERE id = ?", (tx_id,))
-    ).fetchone()
-
-    if not row:
-        await db.close()
-        raise HTTPException(status_code=404, detail="Transaction not found")
-
-    if row["payment_status"] != "paid":
-        await db.close()
-        raise HTTPException(status_code=400, detail="Payment not completed")
-
-    # Mark as verified
-    await db.execute(
-        "UPDATE mobile_transactions SET verified = 1, verified_at = ? WHERE id = ?",
-        (now_iso(), tx_id),
-    )
-    await db.commit()
-
-    # Also create a regular transaction record for sync
-    terminal_id = row["terminal_id"]
-    items = json.loads(row["items_json"])
-    item_count = sum(item.get("quantity", 1) for item in items)
-
-    try:
-        await db.execute(
-            """
-            INSERT INTO transactions
-            (terminal_id, idempotency_key, total_amount, item_count, payload_json, occurred_at, created_at, synced_from_offline, payment_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'scan_pay')
-            """,
-            (
-                terminal_id,
-                row["idempotency_key"],
-                row["total_amount"],
-                item_count,
-                row["items_json"],
-                row["created_at"],
-                now_iso(),
-            ),
-        )
-        await db.commit()
-    except Exception:
-        # Transaction might already exist (idempotent)
-        pass
-
-    await db.close()
-
-    return {
-        "status": "verified",
-        "tx_id": tx_id,
-        "terminal_code": data.get("terminal_code"),
-        "idempotency_key": data.get("idempotency_key"),
-        "total_amount": data.get("total_amount"),
-    }
 
 
 def _error_html(message: str) -> str:
@@ -929,24 +871,7 @@ def _cart_html(
 
 def _verification_html(data: dict) -> str:
     """Generate verification page with QR code"""
-    verified = data.get("verified", False)
     qr_data = json.dumps(data)
-
-    status_html = (
-        """
-        <div class="status pending">
-            <span class="status-icon">⏳</span>
-            <span>Waiting for terminal verification</span>
-        </div>
-    """
-        if not verified
-        else """
-        <div class="status verified">
-            <span class="status-icon">✓</span>
-            <span>Verified by terminal</span>
-        </div>
-    """
-    )
 
     # URL encode the QR data for the API
     import urllib.parse
@@ -991,7 +916,10 @@ def _verification_html(data: dict) -> str:
             
             <p class="instruction">Terminal will scan this QR code to verify your payment</p>
             
-            {status_html}
+            <div class="status pending">
+                <span class="status-icon">⏳</span>
+                <span>Waiting for terminal verification</span>
+            </div>
             
             <div class="details">
                 <div class="detail-row">
@@ -1008,41 +936,6 @@ def _verification_html(data: dict) -> str:
                 </div>
             </div>
         </div>
-        
-        <script>
-            // Poll for verification status
-            setInterval(async () => {{
-                try {{
-                    const res = await fetch('/mobile-checkout/{data.get("tx_id")}/status');
-                    const status = await res.json();
-                    if (status.verified) {{
-                        document.querySelector('.status').className = 'status verified';
-                        document.querySelector('.status').innerHTML = '<span class="status-icon">✓</span><span>Verified by terminal</span>';
-                    }}
-                }} catch (e) {{}}
-            }}, 3000);
-        </script>
     </body>
     </html>
     """
-
-
-@app.get("/mobile-checkout/{tx_id}/status")
-async def get_mobile_transaction_status(tx_id: int):
-    """Get the status of a mobile transaction"""
-    db = await get_db()
-    row = await (
-        await db.execute(
-            "SELECT payment_status, verified FROM mobile_transactions WHERE id = ?",
-            (tx_id,),
-        )
-    ).fetchone()
-    await db.close()
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-
-    return {
-        "payment_status": row["payment_status"],
-        "verified": bool(row["verified"]) if row["verified"] else False,
-    }

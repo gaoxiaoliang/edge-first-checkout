@@ -26,6 +26,7 @@ const OFFLINE_KEY = 'ica_offline_transactions'
 const TOKEN_KEY = 'ica_token'
 const PRIVATE_KEY_KEY = 'ica_terminal_private_key'
 const TERMINAL_CODE_KEY = 'ica_terminal_code'
+const SYSTEM_PUBLIC_KEY_KEY = 'ica_system_public_key'
 
 // Generate random credit card number (masked format)
 const generateCardNumber = () => {
@@ -96,6 +97,7 @@ export function App() {
   const [terminalCode, setTerminalCode] = useState(localStorage.getItem(TERMINAL_CODE_KEY) || 'terminal001')
   const [password, setPassword] = useState('password')
   const [privateKey, setPrivateKey] = useState(localStorage.getItem(PRIVATE_KEY_KEY) || '')
+  const [systemPublicKey, setSystemPublicKey] = useState(localStorage.getItem(SYSTEM_PUBLIC_KEY_KEY) || '')
   const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || '')
   const [cart, setCart] = useState([])
   const [realNetworkOnline, setRealNetworkOnline] = useState(false)  // 真实网络状态
@@ -116,6 +118,7 @@ export function App() {
   const [verificationResult, setVerificationResult] = useState(null) // Result of QR verification
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const pendingTransactions = useMemo(
     () => JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]'),
@@ -229,6 +232,16 @@ export function App() {
     } else {
       localStorage.removeItem(PRIVATE_KEY_KEY)
       window.alert('Private key cleared.')
+    }
+  }
+
+  const saveSystemPublicKey = () => {
+    if (systemPublicKey.trim()) {
+      localStorage.setItem(SYSTEM_PUBLIC_KEY_KEY, systemPublicKey)
+      window.alert('System public key saved successfully!')
+    } else {
+      localStorage.removeItem(SYSTEM_PUBLIC_KEY_KEY)
+      window.alert('System public key cleared.')
     }
   }
 
@@ -382,6 +395,102 @@ export function App() {
     return btoa(String.fromCharCode(...new Uint8Array(signature)))
   }
 
+  // Verify signature with system public key (ECDSA P-256)
+  const verifySignature = async (data, signatureB64) => {
+    const storedKey = localStorage.getItem(SYSTEM_PUBLIC_KEY_KEY)
+    if (!storedKey) {
+      throw new Error('No system public key stored. Please add the system public key in Terminal Info.')
+    }
+
+    // Import the PEM public key
+    const pemContents = storedKey
+      .replace('-----BEGIN PUBLIC KEY-----', '')
+      .replace('-----END PUBLIC KEY-----', '')
+      .replace(/\s/g, '')
+    
+    console.log('[Verify] Public key (first 50 chars):', pemContents.substring(0, 50))
+    
+    const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0))
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      'spki',
+      binaryKey,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['verify']
+    )
+
+    // Decode signature from base64
+    const signatureRaw = Uint8Array.from(atob(signatureB64), c => c.charCodeAt(0))
+    
+    // Backend uses DER format, need to convert to raw format for Web Crypto API
+    // DER format: 0x30 [length] 0x02 [r-length] [r] 0x02 [s-length] [s]
+    // Raw format: [r (32 bytes)] [s (32 bytes)]
+    let signature = signatureRaw
+    if (signatureRaw[0] === 0x30) {
+      // Parse DER format
+      let offset = 2 // Skip 0x30 and length byte
+      
+      // Parse r
+      if (signatureRaw[offset] !== 0x02) throw new Error('Invalid DER signature')
+      offset++
+      const rLength = signatureRaw[offset]
+      offset++
+      const rBytes = signatureRaw.slice(offset, offset + rLength)
+      offset += rLength
+      
+      // Parse s
+      if (signatureRaw[offset] !== 0x02) throw new Error('Invalid DER signature')
+      offset++
+      const sLength = signatureRaw[offset]
+      offset++
+      const sBytes = signatureRaw.slice(offset, offset + sLength)
+      
+      // Convert to 32-byte arrays, handling leading zeros
+      // If length > 32, it has a leading zero we need to remove
+      // If length < 32, we need to pad with leading zeros
+      const r = new Uint8Array(32)
+      const s = new Uint8Array(32)
+      
+      if (rBytes.length > 32) {
+        r.set(rBytes.slice(rBytes.length - 32))
+      } else {
+        r.set(rBytes, 32 - rBytes.length)
+      }
+      
+      if (sBytes.length > 32) {
+        s.set(sBytes.slice(sBytes.length - 32))
+      } else {
+        s.set(sBytes, 32 - sBytes.length)
+      }
+      
+      // Combine r and s
+      signature = new Uint8Array(64)
+      signature.set(r, 0)
+      signature.set(s, 32)
+    }
+
+    // Verify the signature
+    const encoder = new TextEncoder()
+    const dataBuffer = encoder.encode(data)
+    
+    console.log('[Verify] Signature raw length:', signatureRaw.length)
+    console.log('[Verify] Signature P1363 length:', signature.length)
+    
+    try {
+      const result = await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        cryptoKey,
+        signature,
+        dataBuffer
+      )
+      return result
+    } catch (err) {
+      console.error('[Verify] Crypto error:', err)
+      return false
+    }
+  }
+
   // Generate QR code for Scan & Pay
   const generateScanPayQrCode = async () => {
     const storedKey = localStorage.getItem(PRIVATE_KEY_KEY)
@@ -497,52 +606,110 @@ export function App() {
     requestAnimationFrame(scan)
   }
 
-  // Verify the scanned payment QR code
+  // Verify the scanned payment QR code (local verification using system public key)
   const verifyPaymentQrCode = async (qrData) => {
     try {
       // Parse the QR data (expected format: JSON with signature from backend)
       const data = JSON.parse(qrData)
+      const { signature, ...verifyData } = data
       
-      // Send to backend for verification
-      const res = await fetch(`${API_BASE}/verify-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-      
-      if (res.ok) {
-        const result = await res.json()
-        setVerificationResult({ success: true, message: 'Payment verified!', data: result })
-        
-        // Close scanner after success
-        stopVerificationScanner()
-        
-        // Complete the checkout
-        setTimeout(() => {
-          setScanPayQrCode(null)
-          setScanPayData(null)
-          setShowPaymentModal(false)
-          setShowVerifyModal(false)
-          
-          // Show success
-          setCheckoutSuccess(true)
-          setPaymentDetails({ payment_type: 'scan_pay', verified: true })
-          setCart([])
-          
-          setTimeout(() => {
-            setCheckoutSuccess(false)
-            setPaymentDetails(null)
-            setVerificationResult(null)
-          }, 2500)
-        }, 1500)
-      } else {
-        setVerificationResult({ success: false, message: 'Verification failed' })
-        // Continue scanning
+      if (!signature) {
+        setVerificationResult({ success: false, message: 'Invalid QR code: missing signature' })
         scanQRCode()
+        return
       }
+
+      // Check if system public key is configured
+      const storedKey = localStorage.getItem(SYSTEM_PUBLIC_KEY_KEY)
+      if (!storedKey) {
+        setVerificationResult({ success: false, message: 'System public key not configured. Please add it in Terminal Info.' })
+        scanQRCode()
+        return
+      }
+
+      // Verify signature locally using system public key
+      // Sort keys alphabetically to match Python's json.dumps(sort_keys=True)
+      // Also need to match Python's formatting: spaces after : and ,
+      const sortedKeys = Object.keys(verifyData).sort()
+      const parts = []
+      // Fields that are floats in Python (stored as REAL in SQLite)
+      const floatFields = ['total_amount']
+      for (const key of sortedKeys) {
+        let value = verifyData[key]
+        // Format value to match Python's json.dumps output
+        if (typeof value === 'number') {
+          // Only total_amount is a float, others like tx_id are integers
+          if (floatFields.includes(key) && Number.isInteger(value)) {
+            value = value.toFixed(1)  // 69 -> 69.0
+          }
+          parts.push(`"${key}": ${value}`)
+        } else if (typeof value === 'string') {
+          parts.push(`"${key}": "${value}"`)
+        } else if (typeof value === 'boolean') {
+          parts.push(`"${key}": ${value}`)
+        } else {
+          parts.push(`"${key}": ${JSON.stringify(value)}`)
+        }
+      }
+      const dataToVerify = '{' + parts.join(', ') + '}'
+      console.log('[Verify] Data to verify:', dataToVerify)
+      console.log('[Verify] Signature:', signature)
+      const isValid = await verifySignature(dataToVerify, signature)
+      console.log('[Verify] Result:', isValid)
+      
+      if (!isValid) {
+        setVerificationResult({ success: false, message: 'Invalid signature - payment verification failed' })
+        scanQRCode()
+        return
+      }
+
+      // Check payment status from QR data
+      if (verifyData.payment_status !== 'completed') {
+        setVerificationResult({ success: false, message: 'Payment not completed yet' })
+        scanQRCode()
+        return
+      }
+
+      // Verify terminal code matches current terminal
+      if (verifyData.terminal_code !== terminalCode) {
+        setVerificationResult({ success: false, message: 'This payment is for a different terminal' })
+        scanQRCode()
+        return
+      }
+
+      // Verification successful!
+      setVerificationResult({ success: true, message: 'Payment verified!', data: verifyData })
+      
+      // Close scanner after success
+      stopVerificationScanner()
+      
+      // Complete the checkout
+      setTimeout(() => {
+        setScanPayQrCode(null)
+        setScanPayData(null)
+        setShowPaymentModal(false)
+        setShowVerifyModal(false)
+        
+        // Show success
+        setCheckoutSuccess(true)
+        setPaymentDetails({ 
+          payment_type: 'scan_pay', 
+          verified: true,
+          tx_id: verifyData.tx_id,
+          total_amount: verifyData.total_amount
+        })
+        setCart([])
+        
+        setTimeout(() => {
+          setCheckoutSuccess(false)
+          setPaymentDetails(null)
+          setVerificationResult(null)
+        }, 2500)
+      }, 1500)
     } catch (err) {
       console.error('Failed to verify QR code:', err)
-      // Continue scanning on parse error
+      setVerificationResult({ success: false, message: `Verification error: ${err.message}` })
+      // Continue scanning on error
       scanQRCode()
     }
   }
@@ -555,6 +722,61 @@ export function App() {
       videoRef.current.srcObject = null
     }
     setShowVerifyModal(false)
+  }
+
+  // Handle uploaded QR code image
+  const handleQrImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    try {
+      const jsQR = (await import('jsqr')).default
+      
+      // Create image from file
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      
+      img.onload = () => {
+        // Draw image to canvas
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width
+        canvas.height = img.height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0)
+        
+        // Get image data and scan for QR code
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(imageData.data, imageData.width, imageData.height)
+        
+        URL.revokeObjectURL(url)
+        
+        if (code) {
+          verifyPaymentQrCode(code.data)
+        } else {
+          setVerificationResult({ success: false, message: 'No QR code found in image' })
+        }
+      }
+      
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        setVerificationResult({ success: false, message: 'Failed to load image' })
+      }
+      
+      img.src = url
+    } catch (err) {
+      console.error('Failed to process image:', err)
+      setVerificationResult({ success: false, message: 'Failed to process image' })
+    }
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Open file picker for QR image
+  const openQrImagePicker = () => {
+    fileInputRef.current?.click()
   }
 
   return (
@@ -642,6 +864,29 @@ export function App() {
               </button>
               <span className="key-status">
                 {localStorage.getItem(PRIVATE_KEY_KEY) ? 'Key is saved' : 'No key saved'}
+              </span>
+            </div>
+          </div>
+
+          <div className="private-key-section">
+            <h3>System Public Key (ECDSA P-256)</h3>
+            <p className="key-description">
+              Paste the system public key here. This key is used to verify Scan & Pay payment QR codes offline.
+              Copy it from the Dashboard.
+            </p>
+            <textarea
+              value={systemPublicKey}
+              onChange={(e) => setSystemPublicKey(e.target.value)}
+              placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"
+              rows={5}
+              className="private-key-input"
+            />
+            <div className="key-actions">
+              <button onClick={saveSystemPublicKey} className="save-key-btn">
+                {systemPublicKey.trim() ? 'Save System Public Key' : 'Clear System Public Key'}
+              </button>
+              <span className="key-status">
+                {localStorage.getItem(SYSTEM_PUBLIC_KEY_KEY) ? 'Key is saved' : 'No key saved'}
               </span>
             </div>
           </div>
@@ -887,9 +1132,21 @@ export function App() {
                 {verificationResult.message}
               </div>
             )}
-            <button className="cancel-verify" onClick={stopVerificationScanner}>
-              Cancel
-            </button>
+            <div className="verify-actions">
+              <button className="upload-qr-btn" onClick={openQrImagePicker}>
+                Upload QR Image
+              </button>
+              <button className="cancel-verify" onClick={stopVerificationScanner}>
+                Cancel
+              </button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleQrImageUpload}
+              style={{ display: 'none' }}
+            />
           </div>
         </div>
       )}

@@ -9,19 +9,25 @@ export function DashboardApp() {
   const [transactions, setTransactions] = useState([])
   const [newTerminal, setNewTerminal] = useState({ terminal_code: 'terminal001', password: 'password', store_name: 'ICA Demo Store 001' })
   const [notice, setNotice] = useState('')
+  const [systemPublicKey, setSystemPublicKey] = useState('')
 
   const load = async () => {
-    const [statsRes, terminalsRes, syncRes, txRes] = await Promise.all([
+    const [statsRes, terminalsRes, syncRes, txRes, pubKeyRes] = await Promise.all([
       fetch(`${API_BASE}/dashboard/stats`),
       fetch(`${API_BASE}/dashboard/terminals`),
       fetch(`${API_BASE}/dashboard/sync-status`),
-      fetch(`${API_BASE}/dashboard/transactions?limit=20`)
+      fetch(`${API_BASE}/dashboard/transactions?limit=20`),
+      fetch(`${API_BASE}/dashboard/system-public-key`)
     ])
 
     if (statsRes.ok) setStats(await statsRes.json())
     if (terminalsRes.ok) setTerminals(await terminalsRes.json())
     if (syncRes.ok) setSyncStatus(await syncRes.json())
     if (txRes.ok) setTransactions(await txRes.json())
+    if (pubKeyRes.ok) {
+      const data = await pubKeyRes.json()
+      setSystemPublicKey(data.ecdsa_public_key || '')
+    }
   }
 
   useEffect(() => {
@@ -85,6 +91,15 @@ export function DashboardApp() {
     }
   }
 
+  const copySystemPublicKey = async () => {
+    try {
+      await navigator.clipboard.writeText(systemPublicKey)
+      setNotice('System public key copied to clipboard!')
+    } catch {
+      setNotice('Failed to copy system public key.')
+    }
+  }
+
   return (
     <div className="dashboard-shell">
       <h1>ICA Edge Checkout Dashboard</h1>
@@ -95,6 +110,22 @@ export function DashboardApp() {
         <StatCard title="Transactions" value={stats?.total_transactions ?? 0} />
         <StatCard title="Offline Synced" value={stats?.offline_synced_transactions ?? 0} />
         <StatCard title="Terminals Online" value={stats?.online_terminals ?? 0} />
+      </section>
+
+      <section className="panel">
+        <h2>System Public Key</h2>
+        <p className="key-description">
+          Copy this public key to terminals for verifying Scan & Pay payment QR codes offline.
+        </p>
+        <textarea
+          readOnly
+          value={systemPublicKey}
+          rows={4}
+          className="system-key-display"
+        />
+        <button className="copy-system-key-btn" onClick={copySystemPublicKey}>
+          Copy System Public Key
+        </button>
       </section>
 
       <section className="panel">

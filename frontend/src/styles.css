@@ -655,6 +655,8 @@ button {
 /* QR Verification Scanner Modal */
 .verify-modal {
   width: min(500px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
 }
 
 .verify-modal h2 {
@@ -671,7 +673,8 @@ button {
 .scanner-container {
   position: relative;
   width: 100%;
-  aspect-ratio: 1;
+  height: 280px;
+  max-height: 40vh;
   background: #0f172a;
   border-radius: 12px;
   overflow: hidden;
@@ -719,7 +722,34 @@ button {
   color: #dc2626;
 }
 
+.verify-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.upload-qr-btn {
+  flex: 1;
+  background: #2563eb;
+  color: white;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.upload-qr-btn:hover {
+  background: #1d4ed8;
+}
+
 .cancel-verify {
-  width: 100%;
+  flex: 1;
   background: #64748b;
+  color: white;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.cancel-verify:hover {
+  background: #475569;
 }

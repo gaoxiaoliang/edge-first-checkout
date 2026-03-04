@@ -44,21 +44,8 @@ async def init_db() -> None:
             synced_from_offline INTEGER NOT NULL DEFAULT 0,
             payment_type TEXT,
             payment_details_json TEXT,
-            UNIQUE(terminal_id, idempotency_key),
-            FOREIGN KEY (terminal_id) REFERENCES terminals(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS mobile_transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            terminal_id INTEGER NOT NULL,
-            idempotency_key TEXT NOT NULL,
-            total_amount REAL NOT NULL,
-            items_json TEXT NOT NULL,
-            payment_status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL,
+            payment_status TEXT NOT NULL DEFAULT 'completed',
             paid_at TEXT,
-            verified INTEGER NOT NULL DEFAULT 0,
-            verified_at TEXT,
             UNIQUE(terminal_id, idempotency_key),
             FOREIGN KEY (terminal_id) REFERENCES terminals(id)
         );

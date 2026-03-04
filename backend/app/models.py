@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 
 
 # Payment type definitions
-PaymentType = Literal["cash", "credit_card", "swish", "apple_pay", "google_pay"]
+PaymentType = Literal[
+    "cash", "credit_card", "swish", "apple_pay", "google_pay", "scan_pay"
+]
 
 
 class CreditCardDetails(BaseModel):
