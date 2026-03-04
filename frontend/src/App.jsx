@@ -113,6 +113,7 @@ export function App() {
   const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [paymentDetails, setPaymentDetails] = useState(null)
   const [scanPayQrCode, setScanPayQrCode] = useState(null) // QR code data URL for Scan & Pay
+  const [scanPayUrl, setScanPayUrl] = useState(null) // URL for Scan & Pay (for copy button)
   const [scanPayData, setScanPayData] = useState(null) // Data for current Scan & Pay session
   const [showVerifyModal, setShowVerifyModal] = useState(false) // Show QR scanner modal for verification
   const [verificationResult, setVerificationResult] = useState(null) // Result of QR verification
@@ -531,6 +532,7 @@ export function App() {
       
       setScanPayData({ idempotencyKey, payload })
       setScanPayQrCode(qrDataUrl)
+      setScanPayUrl(url)
     } catch (err) {
       console.error('Failed to generate QR code:', err)
       window.alert('Failed to generate QR code. Please check your private key.')
@@ -548,8 +550,17 @@ export function App() {
   // Cancel Scan & Pay and return to payment selection
   const cancelScanPay = () => {
     setScanPayQrCode(null)
+    setScanPayUrl(null)
     setScanPayData(null)
     setSelectedPayment(null)
+  }
+
+  // Copy Scan & Pay URL to clipboard
+  const copyScanPayUrl = async () => {
+    if (scanPayUrl) {
+      await navigator.clipboard.writeText(scanPayUrl)
+      window.alert('Link copied to clipboard!')
+    }
   }
 
   // Start QR scanner for verification
@@ -973,6 +984,14 @@ export function App() {
                 <div className="qr-code-container">
                   <img src={scanPayQrCode} alt="Payment QR Code" />
                 </div>
+                {scanPayUrl && (
+                  <div className="scan-pay-url-container">
+                    <p className="scan-pay-url">{scanPayUrl}</p>
+                    <button className="copy-url-btn" onClick={copyScanPayUrl}>
+                      Copy Link
+                    </button>
+                  </div>
+                )}
                 <p className="scan-pay-hint">After payment, scan the verification code shown on your phone</p>
                 <div className="scan-pay-actions">
                   <button className="verify-btn" onClick={startVerificationScanner}>
