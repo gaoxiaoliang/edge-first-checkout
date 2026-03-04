@@ -4,11 +4,36 @@ import QRCode from 'qrcode'
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 const MOBILE_CHECKOUT_BASE = import.meta.env.VITE_MOBILE_CHECKOUT_BASE || 'http://192.168.1.103:8000'
 const CATALOG = [
-  { id: 'milk', name: 'ICA Milk 1L', price: 19.9 },
-  { id: 'bread', name: 'Sourdough Bread', price: 34.5 },
-  { id: 'banana', name: 'Banana (kg)', price: 24.0 },
-  { id: 'coffee', name: 'Ground Coffee 500g', price: 72.0 },
-  { id: 'apple', name: 'Swedish Apple (kg)', price: 29.0 }
+  { 
+    id: 'banan', 
+    name: 'Banan Eko i klase Klass 1 ICA', 
+    price: 15.00,
+    image: '/src/assets/images/banan.jpg'
+  },
+  { 
+    id: 'mjolk', 
+    name: 'Mellanmjölkdryck 1,5% Laktosfri 1,5l Arla Ko', 
+    price: 26.90,
+    image: '/src/assets/images/mjolk.jpg'
+  },
+  { 
+    id: 'cola', 
+    name: 'Läsk Cola Zero 1,5l Coca-Cola', 
+    price: 24.90,
+    image: '/src/assets/images/cola.jpg'
+  },
+  { 
+    id: 'druvor', 
+    name: 'Druvor Crimson Röda Kärnfria 500g Klass 1 ICA', 
+    price: 25.00,
+    image: '/src/assets/images/druvor.jpg'
+  },
+  { 
+    id: 'tortilla', 
+    name: 'Tortilla Original Medium 8p 320g Santa Maria', 
+    price: 17.90,
+    image: '/src/assets/images/tortilla.jpg'
+  }
 ]
 
 const PAYMENT_TYPES = [
@@ -520,9 +545,13 @@ export function App() {
     try {
       const signature = await signData(payloadStr)
       
+      // Use btoa with unicode handling for Swedish characters
+      const payloadBytes = new TextEncoder().encode(payloadStr)
+      const payloadBase64 = btoa(String.fromCharCode(...payloadBytes))
+      
       // Create the URL with payload and signature
       const params = new URLSearchParams({
-        payload: btoa(payloadStr),
+        payload: payloadBase64,
         signature: signature
       })
       
@@ -986,8 +1015,17 @@ export function App() {
                   onClick={() => addProduct(product)}
                   disabled={!token}
                 >
-                  <strong>{product.name}</strong>
-                  <span>{product.price.toFixed(2)} SEK</span>
+                  {product.image && (
+                    <img 
+                      src={product.image} 
+                      alt={product.name} 
+                      className="product-card-image"
+                    />
+                  )}
+                  <div className="product-card-content">
+                    <strong className="product-card-name">{product.name}</strong>
+                    <span className="product-card-price">{product.price.toFixed(2)} SEK</span>
+                  </div>
                 </button>
               ))}
             </div>
