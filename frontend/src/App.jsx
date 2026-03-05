@@ -149,13 +149,36 @@ export function App() {
   const [verifyErrorModal, setVerifyErrorModal] = useState(false) // Show verification error modal
   const [verifySuccessModal, setVerifySuccessModal] = useState(false) // Show verification success modal
   // Admin & Invoice state
-  const [adminSettings, setAdminSettings] = useState(null)
-  const [invoiceStats, setInvoiceStats] = useState(null)
+  const [adminSettings, setAdminSettings] = useState({
+    allow_invoice_members: true,
+    allow_invoice_non_members: true,
+    non_member_invoice_threshold: 10
+  })
+  const [invoiceStats, setInvoiceStats] = useState({
+    total_invoices: 0,
+    total_invoice_amount: 0,
+    member_invoices: 0,
+    member_invoice_amount: 0,
+    non_member_invoices: 0,
+    non_member_invoice_amount: 0,
+    non_member_invoice_threshold: 10,
+    auto_disabled: false
+  })
+  const [dashboardStats, setDashboardStats] = useState({
+    total_transactions: 0,
+    total_sales: 0,
+    online_transactions: 0,
+    offline_transactions: 0,
+    offline_pending: 0,
+    by_payment_type: {}
+  })
+  const [timelineData, setTimelineData] = useState([]) // [{minute, counts: {cash: 1, invoice: 2, ...}}]
   const [showInvoiceModal, setShowInvoiceModal] = useState(false)
   const [invoiceIsMember, setInvoiceIsMember] = useState(false)
   const [invoiceEmail, setInvoiceEmail] = useState('')
   const [invoiceMembership, setInvoiceMembership] = useState('')
   const [invoiceEmailSent, setInvoiceEmailSent] = useState(null)
+  const [adminTab, setAdminTab] = useState('dashboard')
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -300,41 +323,124 @@ export function App() {
   }
 
   const openAdmin = () => {
-    const code = window.prompt('Enter admin code:')
-    if (code === '1234') {
-      setActiveView('admin')
-      setMenuOpen(false)
-      fetchAdminSettings()
-      fetchInvoiceStats()
+    setActiveView('admin')
+    setMenuOpen(false)
+    refreshAdminData()
+  }
+
+  // Compute local stats from localStorage offline queue
+  const computeLocalStats = () => {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]')
+    let member = 0, memberAmt = 0, nonMember = 0, nonMemberAmt = 0
+    const byType = {}
+    for (const tx of queue) {
+      const pt = tx.payment?.payment_type || 'unknown'
+      byType[pt] = (byType[pt] || { count: 0, amount: 0 })
+      byType[pt].count++
+      byType[pt].amount += tx.total_amount || 0
+      if (pt === 'invoice') {
+        if (tx.payment.invoice?.is_member) {
+          member++
+          memberAmt += tx.total_amount || 0
+        } else {
+          nonMember++
+          nonMemberAmt += tx.total_amount || 0
+        }
+      }
     }
+    return { member, memberAmt, nonMember, nonMemberAmt, pending: queue.length, byType, totalAmt: queue.reduce((s, t) => s + (t.total_amount || 0), 0) }
   }
 
-  const fetchAdminSettings = async () => {
+  const refreshAdminData = async () => {
+    const local = computeLocalStats()
+    // Try to fetch from backend (has synced data)
+    let remoteInvoice = { total_invoices: 0, total_invoice_amount: 0, member_invoices: 0, member_invoice_amount: 0, non_member_invoices: 0, non_member_invoice_amount: 0, non_member_invoice_threshold: adminSettings.non_member_invoice_threshold, auto_disabled: false }
+    let remoteDash = { total_sales: 0, total_transactions: 0, offline_synced_transactions: 0, online_terminals: 0, offline_terminals: 0 }
+    let remoteTxs = []
     try {
-      const res = await fetch(`${API_BASE}/admin/settings`)
-      if (res.ok) setAdminSettings(await res.json())
+      const [settingsRes, statsRes, dashRes, txsRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/settings`),
+        fetch(`${API_BASE}/admin/invoice-stats`),
+        fetch(`${API_BASE}/dashboard/stats`),
+        fetch(`${API_BASE}/dashboard/transactions?limit=1000`)
+      ])
+      if (settingsRes.ok) setAdminSettings(await settingsRes.json())
+      if (statsRes.ok) remoteInvoice = await statsRes.json()
+      if (dashRes.ok) remoteDash = await dashRes.json()
+      if (txsRes.ok) remoteTxs = await txsRes.json()
     } catch { /* offline */ }
+
+    // Merge invoice stats
+    setInvoiceStats({
+      ...remoteInvoice,
+      total_invoices: remoteInvoice.total_invoices + local.member + local.nonMember,
+      total_invoice_amount: remoteInvoice.total_invoice_amount + local.memberAmt + local.nonMemberAmt,
+      member_invoices: remoteInvoice.member_invoices + local.member,
+      member_invoice_amount: remoteInvoice.member_invoice_amount + local.memberAmt,
+      non_member_invoices: remoteInvoice.non_member_invoices + local.nonMember,
+      non_member_invoice_amount: remoteInvoice.non_member_invoice_amount + local.nonMemberAmt,
+    })
+
+    // Build payment type breakdown from backend transactions
+    const remoteByType = {}
+    for (const tx of remoteTxs) {
+      const pt = tx.payment_type || 'unknown'
+      remoteByType[pt] = remoteByType[pt] || { count: 0, amount: 0 }
+      remoteByType[pt].count++
+      remoteByType[pt].amount += tx.total_amount || 0
+    }
+    // Merge with local pending
+    const mergedByType = { ...remoteByType }
+    for (const [pt, data] of Object.entries(local.byType)) {
+      mergedByType[pt] = mergedByType[pt] || { count: 0, amount: 0 }
+      mergedByType[pt].count += data.count
+      mergedByType[pt].amount += data.amount
+    }
+
+    setDashboardStats({
+      total_transactions: remoteDash.total_transactions + local.pending,
+      total_sales: remoteDash.total_sales + local.totalAmt,
+      online_transactions: remoteDash.total_transactions - remoteDash.offline_synced_transactions,
+      offline_transactions: remoteDash.offline_synced_transactions + local.pending,
+      offline_pending: local.pending,
+      by_payment_type: mergedByType
+    })
+
+    // Build timeline: group transactions by minute
+    const allTxs = [
+      ...remoteTxs.map(tx => ({ time: tx.occurred_at || tx.created_at, type: tx.payment_type || 'unknown' })),
+      ...JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]').map(tx => ({ time: tx.occurred_at, type: tx.payment?.payment_type || 'unknown' }))
+    ]
+    const byMinute = {}
+    for (const tx of allTxs) {
+      const d = new Date(tx.time)
+      const key = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+      if (!byMinute[key]) byMinute[key] = {}
+      byMinute[key][tx.type] = (byMinute[key][tx.type] || 0) + 1
+    }
+    const timeline = Object.entries(byMinute)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([minute, counts]) => ({ minute, counts }))
+    setTimelineData(timeline)
   }
 
-  const fetchInvoiceStats = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/admin/invoice-stats`)
-      if (res.ok) setInvoiceStats(await res.json())
-    } catch { /* offline */ }
-  }
+  // Poll admin data every 2s while in admin view
+  useEffect(() => {
+    if (activeView !== 'admin') return
+    const interval = setInterval(refreshAdminData, 2000)
+    return () => clearInterval(interval)
+  }, [activeView])
 
   const updateAdminSetting = async (updates) => {
+    setAdminSettings(prev => ({ ...prev, ...updates }))
     try {
       const res = await fetch(`${API_BASE}/admin/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       })
-      if (res.ok) {
-        setAdminSettings(await res.json())
-        fetchInvoiceStats()
-      }
-    } catch { /* offline */ }
+      if (res.ok) setAdminSettings(await res.json())
+    } catch { /* offline - optimistic update stays */ }
   }
 
   const submitInvoice = () => {
@@ -1061,92 +1167,251 @@ export function App() {
           </div>
         </section>
       ) : activeView === 'admin' ? (
+        <>
+        <div className="admin-navbar">
+          <button className={`admin-nav-item ${adminTab === 'dashboard' ? 'admin-nav-active' : ''}`} onClick={() => setAdminTab('dashboard')}>Dashboard</button>
+          <button className={`admin-nav-item ${adminTab === 'settings' ? 'admin-nav-active' : ''}`} onClick={() => setAdminTab('settings')}>Settings</button>
+          <div className="admin-nav-spacer" />
+          <button className="admin-nav-back" onClick={() => setActiveView('checkout')}>Back to Checkout</button>
+        </div>
+
+        {adminTab === 'settings' ? (
         <section className="panel admin-panel">
-          <div className="pending-header">
-            <h2>Admin Settings</h2>
-            <button onClick={() => setActiveView('checkout')}>Back to Checkout</button>
+          <div className="admin-settings-grid">
+            <div className="admin-toggle-row">
+              <label>Allow member invoices</label>
+              <div
+                className={`toggle-switch ${adminSettings.allow_invoice_members ? 'toggle-switch-on' : ''}`}
+                onClick={() => updateAdminSetting({ allow_invoice_members: !adminSettings.allow_invoice_members })}
+              >
+                <div className="toggle-knob" />
+              </div>
+            </div>
+            <div className="admin-toggle-row">
+              <label>Allow non-member invoices</label>
+              <div
+                className={`toggle-switch ${adminSettings.allow_invoice_non_members ? 'toggle-switch-on' : ''}`}
+                onClick={() => updateAdminSetting({ allow_invoice_non_members: !adminSettings.allow_invoice_non_members })}
+              >
+                <div className="toggle-knob" />
+              </div>
+            </div>
+            <div className="admin-toggle-row">
+              <label>Non-member invoice threshold</label>
+              <div className="threshold-input-group">
+                <input
+                  type="number"
+                  min="1"
+                  value={adminSettings.non_member_invoice_threshold}
+                  onChange={(e) => setAdminSettings(prev => ({ ...prev, non_member_invoice_threshold: parseInt(e.target.value) || 1 }))}
+                  className="threshold-input"
+                />
+                <button
+                  className="save-threshold-btn"
+                  onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           </div>
 
-          {adminSettings ? (
-            <div className="admin-settings-grid">
-              <div className="admin-toggle-row">
-                <label>Allow member invoices</label>
-                <button
-                  className={`toggle-btn ${adminSettings.allow_invoice_members ? 'toggle-on' : 'toggle-off'}`}
-                  onClick={() => updateAdminSetting({ allow_invoice_members: !adminSettings.allow_invoice_members })}
-                >
-                  {adminSettings.allow_invoice_members ? 'ON' : 'OFF'}
-                </button>
-              </div>
-              <div className="admin-toggle-row">
-                <label>Allow non-member invoices</label>
-                <button
-                  className={`toggle-btn ${adminSettings.allow_invoice_non_members ? 'toggle-on' : 'toggle-off'}`}
-                  onClick={() => updateAdminSetting({ allow_invoice_non_members: !adminSettings.allow_invoice_non_members })}
-                >
-                  {adminSettings.allow_invoice_non_members ? 'ON' : 'OFF'}
-                </button>
-              </div>
-              <div className="admin-toggle-row">
-                <label>Non-member invoice threshold</label>
-                <div className="threshold-input-group">
-                  <input
-                    type="number"
-                    min="1"
-                    value={adminSettings.non_member_invoice_threshold}
-                    onChange={(e) => setAdminSettings({ ...adminSettings, non_member_invoice_threshold: parseInt(e.target.value) || 1 })}
-                    className="threshold-input"
-                  />
-                  <button
-                    className="save-threshold-btn"
-                    onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p>Loading settings... (requires network)</p>
-          )}
-
           <h3 style={{ marginTop: '1.5rem' }}>Invoice Statistics</h3>
-          {invoiceStats ? (
-            <div className="invoice-stats-grid">
-              <div className="stat-card">
-                <span className="stat-label">Total Invoices</span>
-                <span className="stat-value">{invoiceStats.total_invoices}</span>
-                <span className="stat-sub">{invoiceStats.total_invoice_amount.toFixed(2)} SEK</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-label">Member Invoices</span>
-                <span className="stat-value">{invoiceStats.member_invoices}</span>
-                <span className="stat-sub">{invoiceStats.member_invoice_amount.toFixed(2)} SEK</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-label">Non-member Invoices</span>
-                <span className="stat-value">{invoiceStats.non_member_invoices}</span>
-                <span className="stat-sub">{invoiceStats.non_member_invoice_amount.toFixed(2)} SEK</span>
-              </div>
-              {invoiceStats.non_member_invoices >= invoiceStats.non_member_invoice_threshold && (
-                <div className="stat-card stat-warning">
-                  <span className="stat-label">Threshold Exceeded</span>
-                  <span className="stat-value">{invoiceStats.non_member_invoices} / {invoiceStats.non_member_invoice_threshold}</span>
-                  <span className="stat-sub">Non-member invoices auto-disabled</span>
-                </div>
-              )}
-              {invoiceStats.non_member_invoices >= invoiceStats.non_member_invoice_threshold * 0.8 && invoiceStats.non_member_invoices < invoiceStats.non_member_invoice_threshold && (
-                <div className="stat-card stat-caution">
-                  <span className="stat-label">Nearing Threshold</span>
-                  <span className="stat-value">{invoiceStats.non_member_invoices} / {invoiceStats.non_member_invoice_threshold}</span>
-                  <span className="stat-sub">Non-member invoices approaching limit</span>
-                </div>
-              )}
+          <div className="invoice-stats-grid">
+            <div className="stat-card">
+              <span className="stat-label">Total Invoices</span>
+              <span className="stat-value">{invoiceStats.total_invoices}</span>
+              <span className="stat-sub">{invoiceStats.total_invoice_amount.toFixed(2)} SEK</span>
             </div>
+            <div className="stat-card">
+              <span className="stat-label">Member Invoices</span>
+              <span className="stat-value">{invoiceStats.member_invoices}</span>
+              <span className="stat-sub">{invoiceStats.member_invoice_amount.toFixed(2)} SEK</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-label">Non-member Invoices</span>
+              <span className="stat-value">{invoiceStats.non_member_invoices}</span>
+              <span className="stat-sub">{invoiceStats.non_member_invoice_amount.toFixed(2)} SEK</span>
+            </div>
+            {invoiceStats.non_member_invoices >= invoiceStats.non_member_invoice_threshold && (
+              <div className="stat-card stat-warning">
+                <span className="stat-label">Threshold Exceeded</span>
+                <span className="stat-value">{invoiceStats.non_member_invoices} / {invoiceStats.non_member_invoice_threshold}</span>
+                <span className="stat-sub">Non-member invoices auto-disabled</span>
+              </div>
+            )}
+            {invoiceStats.non_member_invoices >= invoiceStats.non_member_invoice_threshold * 0.8 && invoiceStats.non_member_invoices < invoiceStats.non_member_invoice_threshold && (
+              <div className="stat-card stat-caution">
+                <span className="stat-label">Nearing Threshold</span>
+                <span className="stat-value">{invoiceStats.non_member_invoices} / {invoiceStats.non_member_invoice_threshold}</span>
+                <span className="stat-sub">Non-member invoices approaching limit</span>
+              </div>
+            )}
+          </div>
+        </section>
+        ) : (
+        <div className="admin-layout">
+        <section className="panel">
+          <div className="dashboard-grid">
+            <div className="dash-card dash-card-primary">
+              <span className="dash-label">Total Transactions</span>
+              <span className="dash-value">{dashboardStats.total_transactions}</span>
+              <span className="dash-sub">{dashboardStats.total_sales.toFixed(2)} SEK</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Online</span>
+              <span className="dash-value dash-green">{dashboardStats.online_transactions}</span>
+              <span className="dash-sub">Synced to server</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Offline Synced</span>
+              <span className="dash-value dash-amber">{dashboardStats.offline_transactions - dashboardStats.offline_pending}</span>
+              <span className="dash-sub">Recovered after reconnect</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Pending Sync</span>
+              <span className="dash-value dash-red">{dashboardStats.offline_pending}</span>
+              <span className="dash-sub">In local queue</span>
+            </div>
+          </div>
+        </section>
+
+        <div className="admin-charts-row">
+        <section className="panel">
+          <h3>By Payment Method</h3>
+          {Object.keys(dashboardStats.by_payment_type).length > 0 ? (
+              <div className="payment-breakdown">
+                {Object.entries(dashboardStats.by_payment_type)
+                  .sort((a, b) => b[1].count - a[1].count)
+                  .map(([type, data]) => {
+                    const info = [...PAYMENT_TYPES, SCAN_PAY_TYPE, INVOICE_TYPE].find(p => p.id === type)
+                    const pct = dashboardStats.total_transactions > 0 ? (data.count / dashboardStats.total_transactions * 100) : 0
+                    return (
+                      <div key={type} className="breakdown-row">
+                        <div className="breakdown-label">
+                          <span className="breakdown-icon">{info?.icon || '?'}</span>
+                          <span>{info?.name || type}</span>
+                        </div>
+                        <div className="breakdown-bar-wrap">
+                          <div className="breakdown-bar" style={{ width: `${Math.max(pct, 2)}%`, background: info?.color || '#94a3b8' }} />
+                        </div>
+                        <div className="breakdown-stats">
+                          <span className="breakdown-count">{data.count}</span>
+                          <span className="breakdown-amount">{data.amount.toFixed(2)} SEK</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
           ) : (
-            <p>Loading stats... (requires network)</p>
+            <p className="chart-empty">No transactions yet</p>
           )}
         </section>
+
+        <section className="panel admin-chart-panel">
+          <h3>Payments Timeline</h3>
+          {timelineData.length === 0 ? (
+            <p className="chart-empty">No transactions yet. Make some checkouts!</p>
+          ) : (() => {
+            const allTypes = new Set()
+            let maxCount = 0
+            for (const slot of timelineData) {
+              let slotTotal = 0
+              for (const [type, count] of Object.entries(slot.counts)) {
+                allTypes.add(type)
+                slotTotal += count
+              }
+              if (slotTotal > maxCount) maxCount = slotTotal
+            }
+            const typeList = [...allTypes]
+            const typeColors = {}
+            const allPayTypes = [...PAYMENT_TYPES, SCAN_PAY_TYPE, INVOICE_TYPE]
+            for (const t of typeList) {
+              const info = allPayTypes.find(p => p.id === t)
+              typeColors[t] = info?.color || '#94a3b8'
+            }
+            const chartW = 500, chartH = 260, padL = 40, padB = 50, padT = 10, padR = 10
+            const plotW = chartW - padL - padR
+            const plotH = chartH - padT - padB
+            const barGroupW = timelineData.length > 0 ? Math.min(plotW / timelineData.length, 60) : 40
+            const barW = Math.max(barGroupW * 0.7, 8)
+            const yScale = maxCount > 0 ? plotH / (maxCount * 1.15) : 1
+            const gridLines = []
+            const yStep = Math.max(1, Math.ceil(maxCount / 4))
+            for (let v = 0; v <= maxCount + yStep; v += yStep) {
+              const y = padT + plotH - v * yScale
+              if (y < padT) break
+              gridLines.push({ v, y })
+            }
+
+            return (
+              <div className="chart-container">
+                <svg viewBox={`0 0 ${chartW} ${chartH}`} className="timeline-svg">
+                  {gridLines.map(({ v, y }) => (
+                    <g key={v}>
+                      <line x1={padL} x2={chartW - padR} y1={y} y2={y} stroke="#e4e4e4" strokeWidth="1" />
+                      <text x={padL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#757575">{v}</text>
+                    </g>
+                  ))}
+                  {timelineData.map((slot, i) => {
+                    const x = padL + i * barGroupW + barGroupW / 2
+                    let cumY = 0
+                    return (
+                      <g key={slot.minute}>
+                        {typeList.map(type => {
+                          const count = slot.counts[type] || 0
+                          if (count === 0) return null
+                          const h = count * yScale
+                          const segY = padT + plotH - cumY - h
+                          cumY += h
+                          return (
+                            <rect
+                              key={type}
+                              x={x - barW / 2}
+                              y={segY}
+                              width={barW}
+                              height={h}
+                              fill={typeColors[type]}
+                              rx="2"
+                            >
+                              <title>{type}: {count}</title>
+                            </rect>
+                          )
+                        })}
+                        <text
+                          x={x}
+                          y={chartH - padB + 16}
+                          textAnchor="middle"
+                          fontSize="10"
+                          fill="#757575"
+                        >
+                          {slot.minute}
+                        </text>
+                      </g>
+                    )
+                  })}
+                  <line x1={padL} x2={padL} y1={padT} y2={padT + plotH} stroke="#d1d1d1" strokeWidth="1" />
+                  <line x1={padL} x2={chartW - padR} y1={padT + plotH} y2={padT + plotH} stroke="#d1d1d1" strokeWidth="1" />
+                </svg>
+                <div className="chart-legend">
+                  {typeList.map(type => {
+                    const info = allPayTypes.find(p => p.id === type)
+                    return (
+                      <div key={type} className="legend-item">
+                        <span className="legend-dot" style={{ background: typeColors[type] }} />
+                        <span>{info?.icon} {info?.name || type}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+        </section>
+        </div>
+        </div>
+        )}
+        </>
       ) : activeView === 'pending' ? (
         <section className="panel">
           <div className="pending-header">
