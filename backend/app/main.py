@@ -14,8 +14,11 @@ from fastapi.responses import HTMLResponse
 from .database import get_db, init_db, now_iso, terminal_status
 from .config import settings
 from .models import (
+    AdminSettingsResponse,
+    AdminSettingsUpdateRequest,
     DashboardStatsResponse,
     HeartbeatRequest,
+    InvoiceStatsResponse,
     LoginRequest,
     SyncBatchRequest,
     SyncStatusResponse,
@@ -142,6 +145,23 @@ async def _resolve_terminal_id(terminal_code: str) -> tuple[int, str]:
     return row["id"], row["terminal_code"]
 
 
+def _tx_response(row) -> TransactionResponse:
+    return TransactionResponse(
+        id=row["id"],
+        terminal_id=row["terminal_id"],
+        idempotency_key=row["idempotency_key"],
+        total_amount=row["total_amount"],
+        item_count=row["item_count"],
+        occurred_at=datetime.fromisoformat(row["occurred_at"]),
+        created_at=datetime.fromisoformat(row["created_at"]),
+        synced_from_offline=bool(row["synced_from_offline"]),
+        payment_type=row["payment_type"],
+        customer_email=row["customer_email"],
+        membership_number=row["membership_number"],
+        is_invoice=bool(row["is_invoice"]),
+    )
+
+
 async def _record_transaction(
     terminal_id: int, payload: TransactionCreateRequest
 ) -> TransactionResponse:
@@ -157,12 +177,62 @@ async def _record_transaction(
         else None
     )
 
+    # Extract invoice fields
+    customer_email = None
+    membership_number = None
+    is_invoice = 0
+    if payment_type == "invoice" and payload.payment and payload.payment.invoice:
+        inv = payload.payment.invoice
+        is_invoice = 1
+        customer_email = inv.customer_email
+        membership_number = inv.membership_number
+
+        # Check admin settings for invoice permissions
+        is_member = inv.is_member
+        settings_rows = await (
+            await db.execute("SELECT key, value FROM admin_settings")
+        ).fetchall()
+        admin = {r["key"]: r["value"] for r in settings_rows}
+
+        if is_member and admin.get("allow_invoice_members") != "true":
+            await db.close()
+            raise HTTPException(
+                status_code=403, detail="Member invoices are currently disabled"
+            )
+        if not is_member and admin.get("allow_invoice_non_members") != "true":
+            await db.close()
+            raise HTTPException(
+                status_code=403, detail="Non-member invoices are currently disabled"
+            )
+
+        # Check threshold for non-members
+        if not is_member:
+            threshold = int(admin.get("non_member_invoice_threshold", "10"))
+            count_row = await (
+                await db.execute(
+                    "SELECT COUNT(*) as cnt FROM transactions WHERE is_invoice = 1 AND membership_number IS NULL"
+                )
+            ).fetchone()
+            current_count = count_row["cnt"]
+            if current_count >= threshold:
+                # Auto-disable non-member invoices
+                await db.execute(
+                    "UPDATE admin_settings SET value = 'false', updated_at = ? WHERE key = 'allow_invoice_non_members'",
+                    (now_iso(),),
+                )
+                await db.commit()
+                await db.close()
+                raise HTTPException(
+                    status_code=403,
+                    detail="Non-member invoice threshold exceeded. Non-member invoices have been auto-disabled.",
+                )
+
     try:
         cur = await db.execute(
             """
             INSERT INTO transactions
-            (terminal_id, idempotency_key, total_amount, item_count, payload_json, occurred_at, created_at, synced_from_offline, payment_type, payment_details_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (terminal_id, idempotency_key, total_amount, item_count, payload_json, occurred_at, created_at, synced_from_offline, payment_type, payment_details_json, customer_email, membership_number, is_invoice)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 terminal_id,
@@ -175,6 +245,9 @@ async def _record_transaction(
                 1 if payload.offline_created else 0,
                 payment_type,
                 payment_details_json,
+                customer_email,
+                membership_number,
+                is_invoice,
             ),
         )
         await db.commit()
@@ -187,34 +260,14 @@ async def _record_transaction(
             )
         ).fetchone()
         await db.close()
-        return TransactionResponse(
-            id=existing["id"],
-            terminal_id=existing["terminal_id"],
-            idempotency_key=existing["idempotency_key"],
-            total_amount=existing["total_amount"],
-            item_count=existing["item_count"],
-            occurred_at=datetime.fromisoformat(existing["occurred_at"]),
-            created_at=datetime.fromisoformat(existing["created_at"]),
-            synced_from_offline=bool(existing["synced_from_offline"]),
-            payment_type=existing["payment_type"],
-        )
+        return _tx_response(existing)
 
     row = await (
         await db.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,))
     ).fetchone()
     await db.close()
 
-    return TransactionResponse(
-        id=row["id"],
-        terminal_id=row["terminal_id"],
-        idempotency_key=row["idempotency_key"],
-        total_amount=row["total_amount"],
-        item_count=row["item_count"],
-        occurred_at=datetime.fromisoformat(row["occurred_at"]),
-        created_at=datetime.fromisoformat(row["created_at"]),
-        synced_from_offline=bool(row["synced_from_offline"]),
-        payment_type=row["payment_type"],
-    )
+    return _tx_response(row)
 
 
 @app.post("/transactions", response_model=TransactionResponse)
@@ -365,20 +418,7 @@ async def list_transactions(limit: int = 100) -> list[TransactionResponse]:
     ).fetchall()
     await db.close()
 
-    return [
-        TransactionResponse(
-            id=row["id"],
-            terminal_id=row["terminal_id"],
-            idempotency_key=row["idempotency_key"],
-            total_amount=row["total_amount"],
-            item_count=row["item_count"],
-            occurred_at=datetime.fromisoformat(row["occurred_at"]),
-            created_at=datetime.fromisoformat(row["created_at"]),
-            synced_from_offline=bool(row["synced_from_offline"]),
-            payment_type=row["payment_type"],
-        )
-        for row in rows
-    ]
+    return [_tx_response(row) for row in rows]
 
 
 @app.get("/dashboard/terminals/{terminal_id}/private-key")
@@ -422,6 +462,95 @@ async def delete_terminal(terminal_id: int) -> dict:
     await db.close()
 
     return {"status": "deleted", "terminal_id": terminal_id}
+
+
+# ============================================
+# Admin Settings Endpoints
+# ============================================
+
+
+@app.get("/admin/settings", response_model=AdminSettingsResponse)
+async def get_admin_settings():
+    db = await get_db()
+    rows = await (await db.execute("SELECT key, value FROM admin_settings")).fetchall()
+    await db.close()
+    s = {r["key"]: r["value"] for r in rows}
+    return AdminSettingsResponse(
+        allow_invoice_members=s.get("allow_invoice_members") == "true",
+        allow_invoice_non_members=s.get("allow_invoice_non_members") == "true",
+        non_member_invoice_threshold=int(
+            s.get("non_member_invoice_threshold", "10")
+        ),
+    )
+
+
+@app.put("/admin/settings", response_model=AdminSettingsResponse)
+async def update_admin_settings(payload: AdminSettingsUpdateRequest):
+    db = await get_db()
+    now = now_iso()
+    if payload.allow_invoice_members is not None:
+        await db.execute(
+            "UPDATE admin_settings SET value = ?, updated_at = ? WHERE key = 'allow_invoice_members'",
+            (str(payload.allow_invoice_members).lower(), now),
+        )
+    if payload.allow_invoice_non_members is not None:
+        await db.execute(
+            "UPDATE admin_settings SET value = ?, updated_at = ? WHERE key = 'allow_invoice_non_members'",
+            (str(payload.allow_invoice_non_members).lower(), now),
+        )
+    if payload.non_member_invoice_threshold is not None:
+        await db.execute(
+            "UPDATE admin_settings SET value = ?, updated_at = ? WHERE key = 'non_member_invoice_threshold'",
+            (str(payload.non_member_invoice_threshold), now),
+        )
+    await db.commit()
+    rows = await (await db.execute("SELECT key, value FROM admin_settings")).fetchall()
+    await db.close()
+    s = {r["key"]: r["value"] for r in rows}
+    return AdminSettingsResponse(
+        allow_invoice_members=s.get("allow_invoice_members") == "true",
+        allow_invoice_non_members=s.get("allow_invoice_non_members") == "true",
+        non_member_invoice_threshold=int(
+            s.get("non_member_invoice_threshold", "10")
+        ),
+    )
+
+
+@app.get("/admin/invoice-stats", response_model=InvoiceStatsResponse)
+async def get_invoice_stats():
+    db = await get_db()
+    total_row = await (
+        await db.execute(
+            "SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount), 0) as amt FROM transactions WHERE is_invoice = 1"
+        )
+    ).fetchone()
+    member_row = await (
+        await db.execute(
+            "SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount), 0) as amt FROM transactions WHERE is_invoice = 1 AND membership_number IS NOT NULL"
+        )
+    ).fetchone()
+    non_member_row = await (
+        await db.execute(
+            "SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount), 0) as amt FROM transactions WHERE is_invoice = 1 AND membership_number IS NULL"
+        )
+    ).fetchone()
+    settings_rows = await (
+        await db.execute("SELECT key, value FROM admin_settings")
+    ).fetchall()
+    await db.close()
+    s = {r["key"]: r["value"] for r in settings_rows}
+    threshold = int(s.get("non_member_invoice_threshold", "10"))
+    return InvoiceStatsResponse(
+        total_invoices=total_row["cnt"],
+        total_invoice_amount=float(total_row["amt"]),
+        member_invoices=member_row["cnt"],
+        member_invoice_amount=float(member_row["amt"]),
+        non_member_invoices=non_member_row["cnt"],
+        non_member_invoice_amount=float(non_member_row["amt"]),
+        non_member_invoice_threshold=threshold,
+        auto_disabled=s.get("allow_invoice_non_members") != "true"
+        and non_member_row["cnt"] >= threshold,
+    )
 
 
 # ============================================

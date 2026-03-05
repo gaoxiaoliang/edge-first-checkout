@@ -49,8 +49,39 @@ async def init_db() -> None:
             UNIQUE(terminal_id, idempotency_key),
             FOREIGN KEY (terminal_id) REFERENCES terminals(id)
         );
+
+        CREATE TABLE IF NOT EXISTS admin_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
     )
+
+    # Seed default admin settings
+    now = now_iso()
+    defaults = {
+        "allow_invoice_members": "true",
+        "allow_invoice_non_members": "true",
+        "non_member_invoice_threshold": "10",
+    }
+    for key, value in defaults.items():
+        await db.execute(
+            "INSERT OR IGNORE INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?)",
+            (key, value, now),
+        )
+
+    # Add invoice columns to transactions (idempotent ALTER TABLE)
+    for col, col_def in [
+        ("customer_email", "TEXT"),
+        ("membership_number", "TEXT"),
+        ("is_invoice", "INTEGER DEFAULT 0"),
+    ]:
+        try:
+            await db.execute(f"ALTER TABLE transactions ADD COLUMN {col} {col_def}")
+        except Exception:
+            pass  # Column already exists
+
     await db.commit()
     await db.close()
 

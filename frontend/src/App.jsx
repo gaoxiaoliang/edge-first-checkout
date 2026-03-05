@@ -44,8 +44,9 @@ const PAYMENT_TYPES = [
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', color: '#ea580c' }
 ]
 
-// Offline-only payment type
+// Offline-only payment types
 const SCAN_PAY_TYPE = { id: 'scan_pay', name: 'Scan & Pay', icon: '📲', color: '#8b5cf6' }
+const INVOICE_TYPE = { id: 'invoice', name: 'Invoice', icon: '🧾', color: '#d97706' }
 
 const OFFLINE_KEY = 'ica_offline_transactions'
 const TOKEN_KEY = 'ica_token'
@@ -147,6 +148,14 @@ export function App() {
   const [parsedQrData, setParsedQrData] = useState(null) // Parsed QR data from pasted image
   const [verifyErrorModal, setVerifyErrorModal] = useState(false) // Show verification error modal
   const [verifySuccessModal, setVerifySuccessModal] = useState(false) // Show verification success modal
+  // Admin & Invoice state
+  const [adminSettings, setAdminSettings] = useState(null)
+  const [invoiceStats, setInvoiceStats] = useState(null)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [invoiceIsMember, setInvoiceIsMember] = useState(false)
+  const [invoiceEmail, setInvoiceEmail] = useState('')
+  const [invoiceMembership, setInvoiceMembership] = useState('')
+  const [invoiceEmailSent, setInvoiceEmailSent] = useState(null)
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -288,6 +297,73 @@ export function App() {
   const goToPendingTransactions = () => {
     setActiveView('pending')
     setMenuOpen(false)
+  }
+
+  const openAdmin = () => {
+    const code = window.prompt('Enter admin code:')
+    if (code === '1234') {
+      setActiveView('admin')
+      setMenuOpen(false)
+      fetchAdminSettings()
+      fetchInvoiceStats()
+    }
+  }
+
+  const fetchAdminSettings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/settings`)
+      if (res.ok) setAdminSettings(await res.json())
+    } catch { /* offline */ }
+  }
+
+  const fetchInvoiceStats = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/invoice-stats`)
+      if (res.ok) setInvoiceStats(await res.json())
+    } catch { /* offline */ }
+  }
+
+  const updateAdminSetting = async (updates) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+      if (res.ok) {
+        setAdminSettings(await res.json())
+        fetchInvoiceStats()
+      }
+    } catch { /* offline */ }
+  }
+
+  const submitInvoice = () => {
+    const payment = {
+      payment_type: 'invoice',
+      invoice: {
+        customer_email: invoiceIsMember ? null : invoiceEmail,
+        membership_number: invoiceIsMember ? invoiceMembership : null,
+        is_member: invoiceIsMember
+      }
+    }
+    setShowInvoiceModal(false)
+    setShowPaymentModal(false)
+
+    // Show mock email sent
+    const recipient = invoiceIsMember ? invoiceMembership : invoiceEmail
+    completeCheckout(payment)
+    setInvoiceEmailSent({
+      recipient,
+      amount: total,
+      items: [...cart],
+      isMember: invoiceIsMember
+    })
+    setTimeout(() => setInvoiceEmailSent(null), 4000)
+
+    // Reset invoice fields
+    setInvoiceEmail('')
+    setInvoiceMembership('')
+    setInvoiceIsMember(false)
   }
 
   const addProduct = (product) => {
@@ -900,6 +976,7 @@ export function App() {
                   <button onClick={goToPendingTransactions}>
                     Pending Transactions ({pendingTransactions.length})
                   </button>
+                  <button onClick={openAdmin}>Admin</button>
                   <button onClick={logout}>Sign Out</button>
                 </div>
               )}
@@ -982,6 +1059,93 @@ export function App() {
               </span>
             </div>
           </div>
+        </section>
+      ) : activeView === 'admin' ? (
+        <section className="panel admin-panel">
+          <div className="pending-header">
+            <h2>Admin Settings</h2>
+            <button onClick={() => setActiveView('checkout')}>Back to Checkout</button>
+          </div>
+
+          {adminSettings ? (
+            <div className="admin-settings-grid">
+              <div className="admin-toggle-row">
+                <label>Allow member invoices</label>
+                <button
+                  className={`toggle-btn ${adminSettings.allow_invoice_members ? 'toggle-on' : 'toggle-off'}`}
+                  onClick={() => updateAdminSetting({ allow_invoice_members: !adminSettings.allow_invoice_members })}
+                >
+                  {adminSettings.allow_invoice_members ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <div className="admin-toggle-row">
+                <label>Allow non-member invoices</label>
+                <button
+                  className={`toggle-btn ${adminSettings.allow_invoice_non_members ? 'toggle-on' : 'toggle-off'}`}
+                  onClick={() => updateAdminSetting({ allow_invoice_non_members: !adminSettings.allow_invoice_non_members })}
+                >
+                  {adminSettings.allow_invoice_non_members ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <div className="admin-toggle-row">
+                <label>Non-member invoice threshold</label>
+                <div className="threshold-input-group">
+                  <input
+                    type="number"
+                    min="1"
+                    value={adminSettings.non_member_invoice_threshold}
+                    onChange={(e) => setAdminSettings({ ...adminSettings, non_member_invoice_threshold: parseInt(e.target.value) || 1 })}
+                    className="threshold-input"
+                  />
+                  <button
+                    className="save-threshold-btn"
+                    onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p>Loading settings... (requires network)</p>
+          )}
+
+          <h3 style={{ marginTop: '1.5rem' }}>Invoice Statistics</h3>
+          {invoiceStats ? (
+            <div className="invoice-stats-grid">
+              <div className="stat-card">
+                <span className="stat-label">Total Invoices</span>
+                <span className="stat-value">{invoiceStats.total_invoices}</span>
+                <span className="stat-sub">{invoiceStats.total_invoice_amount.toFixed(2)} SEK</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Member Invoices</span>
+                <span className="stat-value">{invoiceStats.member_invoices}</span>
+                <span className="stat-sub">{invoiceStats.member_invoice_amount.toFixed(2)} SEK</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Non-member Invoices</span>
+                <span className="stat-value">{invoiceStats.non_member_invoices}</span>
+                <span className="stat-sub">{invoiceStats.non_member_invoice_amount.toFixed(2)} SEK</span>
+              </div>
+              {invoiceStats.non_member_invoices >= invoiceStats.non_member_invoice_threshold && (
+                <div className="stat-card stat-warning">
+                  <span className="stat-label">Threshold Exceeded</span>
+                  <span className="stat-value">{invoiceStats.non_member_invoices} / {invoiceStats.non_member_invoice_threshold}</span>
+                  <span className="stat-sub">Non-member invoices auto-disabled</span>
+                </div>
+              )}
+              {invoiceStats.non_member_invoices >= invoiceStats.non_member_invoice_threshold * 0.8 && invoiceStats.non_member_invoices < invoiceStats.non_member_invoice_threshold && (
+                <div className="stat-card stat-caution">
+                  <span className="stat-label">Nearing Threshold</span>
+                  <span className="stat-value">{invoiceStats.non_member_invoices} / {invoiceStats.non_member_invoice_threshold}</span>
+                  <span className="stat-sub">Non-member invoices approaching limit</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p>Loading stats... (requires network)</p>
+          )}
         </section>
       ) : activeView === 'pending' ? (
         <section className="panel">
@@ -1097,7 +1261,7 @@ export function App() {
                 <h2>Select Payment Method</h2>
                 <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
                 {!networkOnline && (
-                  <p className="offline-payment-notice">Offline mode: Cash or Scan & Pay available</p>
+                  <p className="offline-payment-notice">Offline mode: Cash, Scan & Pay, or Invoice available</p>
                 )}
                 <div className="payment-options">
                   {PAYMENT_TYPES
@@ -1122,6 +1286,17 @@ export function App() {
                     >
                       <span className="payment-icon">{SCAN_PAY_TYPE.icon}</span>
                       <span className="payment-name">{SCAN_PAY_TYPE.name}</span>
+                    </button>
+                  )}
+                  {/* Invoice option - only available offline */}
+                  {!networkOnline && (
+                    <button
+                      className="payment-option"
+                      style={{ '--payment-color': INVOICE_TYPE.color }}
+                      onClick={() => { setShowInvoiceModal(true); setInvoiceIsMember(false); setInvoiceEmail(''); setInvoiceMembership('') }}
+                    >
+                      <span className="payment-icon">{INVOICE_TYPE.icon}</span>
+                      <span className="payment-name">{INVOICE_TYPE.name}</span>
                     </button>
                   )}
                 </div>
@@ -1191,8 +1366,8 @@ export function App() {
                 {paymentDetails && (
                   <div className="receipt-info">
                     <p className="payment-method-used">
-                      Paid with {PAYMENT_TYPES.find(p => p.id === paymentDetails.payment_type)?.name}
-                      {' '}{PAYMENT_TYPES.find(p => p.id === paymentDetails.payment_type)?.icon}
+                      Paid with {paymentDetails.payment_type === 'invoice' ? INVOICE_TYPE.name : PAYMENT_TYPES.find(p => p.id === paymentDetails.payment_type)?.name}
+                      {' '}{paymentDetails.payment_type === 'invoice' ? INVOICE_TYPE.icon : PAYMENT_TYPES.find(p => p.id === paymentDetails.payment_type)?.icon}
                     </p>
                     {paymentDetails.credit_card && (
                       <p className="receipt-detail">
@@ -1325,6 +1500,82 @@ export function App() {
             }}>
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Details Modal */}
+      {showInvoiceModal && (
+        <div className="modal-overlay">
+          <div className="modal invoice-modal">
+            <h2>Invoice Payment</h2>
+            <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
+            <div className="invoice-type-toggle">
+              <button
+                className={`invoice-type-btn ${!invoiceIsMember ? 'active' : ''}`}
+                onClick={() => setInvoiceIsMember(false)}
+              >
+                Non-member (Email)
+              </button>
+              <button
+                className={`invoice-type-btn ${invoiceIsMember ? 'active' : ''}`}
+                onClick={() => setInvoiceIsMember(true)}
+              >
+                ICA Member
+              </button>
+            </div>
+            {invoiceIsMember ? (
+              <div className="invoice-field">
+                <label>ICA Membership Number</label>
+                <input
+                  type="text"
+                  value={invoiceMembership}
+                  onChange={(e) => setInvoiceMembership(e.target.value)}
+                  placeholder="Enter membership number"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="invoice-field">
+                <label>Customer Email</label>
+                <input
+                  type="email"
+                  value={invoiceEmail}
+                  onChange={(e) => setInvoiceEmail(e.target.value)}
+                  placeholder="customer@example.com"
+                  autoFocus
+                />
+              </div>
+            )}
+            <div className="invoice-actions">
+              <button
+                className="invoice-submit-btn"
+                onClick={submitInvoice}
+                disabled={invoiceIsMember ? !invoiceMembership.trim() : !invoiceEmail.trim()}
+              >
+                Send Invoice
+              </button>
+              <button className="cancel-payment" onClick={() => setShowInvoiceModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mock Invoice Email Sent Modal */}
+      {invoiceEmailSent && (
+        <div className="modal-overlay">
+          <div className="modal invoice-email-modal">
+            <div className="success-icon">✓</div>
+            <h2>Invoice Sent!</h2>
+            <p className="invoice-sent-to">
+              {invoiceEmailSent.isMember
+                ? `Invoice sent to ICA member ${invoiceEmailSent.recipient}`
+                : `Invoice email sent to ${invoiceEmailSent.recipient}`}
+            </p>
+            <p className="invoice-sent-amount">{invoiceEmailSent.amount.toFixed(2)} SEK</p>
+            <p className="invoice-sent-items">{invoiceEmailSent.items.length} item(s)</p>
           </div>
         </div>
       )}

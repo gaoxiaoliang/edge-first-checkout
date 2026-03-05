@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 # Payment type definitions
 PaymentType = Literal[
-    "cash", "credit_card", "swish", "apple_pay", "google_pay", "scan_pay"
+    "cash", "credit_card", "swish", "apple_pay", "google_pay", "scan_pay", "invoice"
 ]
 
 
@@ -33,6 +33,14 @@ class MobilePayDetails(BaseModel):
     transaction_token: str | None = None
 
 
+class InvoiceDetails(BaseModel):
+    """Details for invoice payments (offline fallback)"""
+
+    customer_email: str | None = None
+    membership_number: str | None = None
+    is_member: bool = False
+
+
 class PaymentDetails(BaseModel):
     """Payment information for a transaction"""
 
@@ -40,6 +48,7 @@ class PaymentDetails(BaseModel):
     credit_card: CreditCardDetails | None = None
     swish: SwishDetails | None = None
     mobile_pay: MobilePayDetails | None = None
+    invoice: InvoiceDetails | None = None
     cash_tendered: float | None = None  # For cash payments
     cash_change: float | None = None  # Change given back
 
@@ -118,7 +127,10 @@ class TransactionResponse(BaseModel):
     occurred_at: datetime
     created_at: datetime
     synced_from_offline: bool
-    payment_type: PaymentType | None = None  # Payment type used
+    payment_type: PaymentType | None = None
+    customer_email: str | None = None
+    membership_number: str | None = None
+    is_invoice: bool = False
 
 
 class DashboardStatsResponse(BaseModel):
@@ -133,3 +145,26 @@ class SyncStatusResponse(BaseModel):
     terminal_code: str
     pending_sync_count: int
     last_synced_at: datetime | None
+
+
+class AdminSettingsResponse(BaseModel):
+    allow_invoice_members: bool
+    allow_invoice_non_members: bool
+    non_member_invoice_threshold: int
+
+
+class AdminSettingsUpdateRequest(BaseModel):
+    allow_invoice_members: bool | None = None
+    allow_invoice_non_members: bool | None = None
+    non_member_invoice_threshold: int | None = None
+
+
+class InvoiceStatsResponse(BaseModel):
+    total_invoices: int
+    total_invoice_amount: float
+    member_invoices: int
+    member_invoice_amount: float
+    non_member_invoices: int
+    non_member_invoice_amount: float
+    non_member_invoice_threshold: int
+    auto_disabled: bool

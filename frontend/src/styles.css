@@ -1246,3 +1246,260 @@ button:active:not(:disabled) {
   color: var(--ica-text-muted);
   margin-bottom: 1.25rem;
 }
+
+/* Admin Panel */
+.admin-panel {
+  max-width: 700px;
+}
+
+.admin-settings-grid {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.admin-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--ica-bg);
+  border-radius: var(--ica-radius);
+  border: 1px solid var(--ica-border-light);
+}
+
+.admin-toggle-row label {
+  font-weight: 500;
+  color: var(--ica-text);
+}
+
+.toggle-btn {
+  padding: 0.5rem 1.25rem;
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: none;
+  cursor: pointer;
+  min-width: 70px;
+}
+
+.toggle-on {
+  background: var(--ica-green);
+  color: white;
+}
+
+.toggle-on:hover {
+  background: #006016;
+}
+
+.toggle-off {
+  background: var(--ica-error);
+  color: white;
+}
+
+.toggle-off:hover {
+  background: #b90908;
+}
+
+.threshold-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.threshold-input {
+  width: 80px;
+  padding: 0.5rem;
+  border: 1px solid var(--ica-border);
+  border-radius: var(--ica-radius);
+  font-size: 0.9375rem;
+  text-align: center;
+}
+
+.save-threshold-btn {
+  padding: 0.5rem 1rem;
+  background: var(--ica-text);
+  font-size: 0.8125rem;
+}
+
+.save-threshold-btn:hover {
+  background: var(--ica-text-light);
+}
+
+/* Invoice Stats */
+.invoice-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.stat-card {
+  background: var(--ica-bg);
+  border: 1px solid var(--ica-border-light);
+  border-radius: var(--ica-radius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ica-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ica-text);
+}
+
+.stat-sub {
+  font-size: 0.875rem;
+  color: var(--ica-text-muted);
+}
+
+.stat-warning {
+  border-color: var(--ica-error);
+  background: var(--ica-error-light);
+}
+
+.stat-warning .stat-value {
+  color: var(--ica-error);
+}
+
+.stat-caution {
+  border-color: var(--ica-yellow);
+  background: var(--ica-yellow-light);
+}
+
+.stat-caution .stat-value {
+  color: #8a6d0b;
+}
+
+/* Invoice Modal */
+.invoice-modal {
+  min-width: 360px;
+}
+
+.invoice-modal h2 {
+  margin: 0 0 0.5rem;
+  text-align: center;
+  border: none;
+  padding: 0;
+  font-size: 1.375rem;
+}
+
+.invoice-type-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1.25rem;
+  border-radius: var(--ica-radius);
+  overflow: hidden;
+  border: 2px solid var(--ica-border);
+}
+
+.invoice-type-btn {
+  flex: 1;
+  padding: 0.75rem;
+  background: var(--ica-bg);
+  color: var(--ica-text-muted);
+  border: none;
+  border-radius: 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.invoice-type-btn.active {
+  background: var(--ica-red);
+  color: white;
+}
+
+.invoice-type-btn:hover:not(.active) {
+  background: var(--ica-border-light);
+  transform: none;
+  box-shadow: none;
+}
+
+.invoice-field {
+  margin-bottom: 1rem;
+}
+
+.invoice-field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ica-text-muted);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.invoice-field input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--ica-border);
+  border-radius: var(--ica-radius);
+  font-size: 1rem;
+}
+
+.invoice-field input:focus {
+  outline: none;
+  border-color: var(--ica-red);
+}
+
+.invoice-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.invoice-submit-btn {
+  background: #d97706;
+  padding: 0.875rem;
+  font-size: 1.05rem;
+}
+
+.invoice-submit-btn:hover:not(:disabled) {
+  background: #b45309;
+}
+
+.invoice-submit-btn:disabled {
+  background: var(--ica-text-muted);
+}
+
+/* Invoice Email Sent Modal */
+.invoice-email-modal {
+  text-align: center;
+}
+
+.invoice-email-modal h2 {
+  border: none;
+  padding: 0;
+}
+
+.invoice-sent-to {
+  color: var(--ica-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.invoice-sent-amount {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ica-red);
+  margin: 0.25rem 0;
+}
+
+.invoice-sent-items {
+  font-size: 0.875rem;
+  color: var(--ica-text-muted);
+}
