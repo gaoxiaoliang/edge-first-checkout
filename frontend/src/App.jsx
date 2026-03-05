@@ -179,6 +179,7 @@ export function App() {
   const [invoiceMembership, setInvoiceMembership] = useState('')
   const [invoiceEmailSent, setInvoiceEmailSent] = useState(null)
   const [adminTab, setAdminTab] = useState('dashboard')
+  const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -441,6 +442,18 @@ export function App() {
       })
       if (res.ok) setAdminSettings(await res.json())
     } catch { /* offline - optimistic update stays */ }
+  }
+
+  const simulateInvoiceScan = () => {
+    setInvoiceScanStep('scanning')
+    setTimeout(() => {
+      if (invoiceIsMember) {
+        setInvoiceMembership('ICA-2847-5931-0042')
+      } else {
+        setInvoiceEmail('erik.lindqvist@gmail.com')
+      }
+      setInvoiceScanStep('scanned')
+    }, 1800)
   }
 
   const submitInvoice = () => {
@@ -1558,7 +1571,7 @@ export function App() {
                     <button
                       className="payment-option"
                       style={{ '--payment-color': INVOICE_TYPE.color }}
-                      onClick={() => { setShowInvoiceModal(true); setInvoiceIsMember(false); setInvoiceEmail(''); setInvoiceMembership('') }}
+                      onClick={() => { setShowInvoiceModal(true); setInvoiceIsMember(false); setInvoiceEmail(''); setInvoiceMembership(''); setInvoiceScanStep('choose') }}
                     >
                       <span className="payment-icon">{INVOICE_TYPE.icon}</span>
                       <span className="payment-name">{INVOICE_TYPE.name}</span>
@@ -1778,52 +1791,125 @@ export function App() {
             <div className="invoice-type-toggle">
               <button
                 className={`invoice-type-btn ${!invoiceIsMember ? 'active' : ''}`}
-                onClick={() => setInvoiceIsMember(false)}
+                onClick={() => { setInvoiceIsMember(false); setInvoiceScanStep('choose'); setInvoiceEmail(''); setInvoiceMembership('') }}
               >
-                Non-member (Email)
+                Non-member
               </button>
               <button
                 className={`invoice-type-btn ${invoiceIsMember ? 'active' : ''}`}
-                onClick={() => setInvoiceIsMember(true)}
+                onClick={() => { setInvoiceIsMember(true); setInvoiceScanStep('choose'); setInvoiceEmail(''); setInvoiceMembership('') }}
               >
                 ICA Member
               </button>
             </div>
-            {invoiceIsMember ? (
-              <div className="invoice-field">
-                <label>ICA Membership Number</label>
-                <input
-                  type="text"
-                  value={invoiceMembership}
-                  onChange={(e) => setInvoiceMembership(e.target.value)}
-                  placeholder="Enter membership number"
-                  autoFocus
-                />
+            {invoiceScanStep === 'choose' ? (
+              <div className="invoice-scan-card">
+                {invoiceIsMember ? (
+                  <div className="scan-id-visual ica-card">
+                    <div className="ica-card-header">
+                      <span className="ica-card-logo">ICA</span>
+                      <span className="ica-card-title">Stammis</span>
+                    </div>
+                    <div className="scan-qr-placeholder">
+                      <svg viewBox="0 0 100 100" width="120" height="120">
+                        <rect x="5" y="5" width="25" height="25" rx="3" fill="#cf2005"/>
+                        <rect x="70" y="5" width="25" height="25" rx="3" fill="#cf2005"/>
+                        <rect x="5" y="70" width="25" height="25" rx="3" fill="#cf2005"/>
+                        <rect x="38" y="5" width="8" height="8" rx="1" fill="#cf2005" opacity="0.6"/>
+                        <rect x="50" y="5" width="8" height="8" rx="1" fill="#cf2005" opacity="0.4"/>
+                        <rect x="38" y="17" width="8" height="8" rx="1" fill="#cf2005" opacity="0.5"/>
+                        <rect x="5" y="38" width="8" height="8" rx="1" fill="#cf2005" opacity="0.5"/>
+                        <rect x="17" y="38" width="8" height="8" rx="1" fill="#cf2005" opacity="0.3"/>
+                        <rect x="38" y="38" width="8" height="8" rx="1" fill="#cf2005" opacity="0.7"/>
+                        <rect x="50" y="38" width="8" height="8" rx="1" fill="#cf2005" opacity="0.4"/>
+                        <rect x="62" y="38" width="8" height="8" rx="1" fill="#cf2005" opacity="0.6"/>
+                        <rect x="38" y="50" width="8" height="8" rx="1" fill="#cf2005" opacity="0.3"/>
+                        <rect x="50" y="50" width="8" height="8" rx="1" fill="#cf2005" opacity="0.5"/>
+                        <rect x="62" y="50" width="8" height="8" rx="1" fill="#cf2005" opacity="0.7"/>
+                        <rect x="80" y="50" width="8" height="8" rx="1" fill="#cf2005" opacity="0.4"/>
+                        <rect x="38" y="70" width="8" height="8" rx="1" fill="#cf2005" opacity="0.6"/>
+                        <rect x="50" y="70" width="8" height="8" rx="1" fill="#cf2005" opacity="0.3"/>
+                        <rect x="70" y="70" width="25" height="8" rx="1" fill="#cf2005" opacity="0.5"/>
+                        <rect x="70" y="82" width="8" height="13" rx="1" fill="#cf2005" opacity="0.6"/>
+                        <rect x="82" y="82" width="13" height="13" rx="1" fill="#cf2005" opacity="0.4"/>
+                      </svg>
+                    </div>
+                    <div className="ica-card-name">ICA-2847-5931-0042</div>
+                  </div>
+                ) : (
+                  <div className="scan-id-visual license-card">
+                    <div className="license-header">
+                      <span className="license-flag">🇸🇪</span>
+                      <span className="license-title">Korkort</span>
+                      <span className="license-country">SVERIGE</span>
+                    </div>
+                    <div className="license-body">
+                      <div className="license-photo">
+                        <svg viewBox="0 0 60 70" width="50" height="58">
+                          <rect width="60" height="70" rx="4" fill="#e2e8f0"/>
+                          <circle cx="30" cy="25" r="14" fill="#94a3b8"/>
+                          <ellipse cx="30" cy="58" rx="20" ry="16" fill="#94a3b8"/>
+                        </svg>
+                      </div>
+                      <div className="license-info">
+                        <div className="license-row"><span className="license-label">1.</span> Lindqvist</div>
+                        <div className="license-row"><span className="license-label">2.</span> Erik Anders</div>
+                        <div className="license-row"><span className="license-label">3.</span> 1988-04-15</div>
+                      </div>
+                    </div>
+                    <div className="license-qr">
+                      <svg viewBox="0 0 80 80" width="60" height="60">
+                        <rect x="3" y="3" width="20" height="20" rx="2" fill="#1e3a5f"/>
+                        <rect x="57" y="3" width="20" height="20" rx="2" fill="#1e3a5f"/>
+                        <rect x="3" y="57" width="20" height="20" rx="2" fill="#1e3a5f"/>
+                        <rect x="28" y="3" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.5"/>
+                        <rect x="38" y="8" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.4"/>
+                        <rect x="28" y="28" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.6"/>
+                        <rect x="38" y="28" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.3"/>
+                        <rect x="48" y="28" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.5"/>
+                        <rect x="28" y="48" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.4"/>
+                        <rect x="58" y="48" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.6"/>
+                        <rect x="48" y="58" width="6" height="6" rx="1" fill="#1e3a5f" opacity="0.5"/>
+                        <rect x="58" y="58" width="18" height="6" rx="1" fill="#1e3a5f" opacity="0.4"/>
+                        <rect x="58" y="68" width="6" height="9" rx="1" fill="#1e3a5f" opacity="0.6"/>
+                      </svg>
+                    </div>
+                  </div>
+                )}
+                <button className="scan-id-btn" onClick={simulateInvoiceScan}>
+                  Scan {invoiceIsMember ? 'Membership Card' : 'Driving License'}
+                </button>
+                <button className="cancel-payment" onClick={() => setShowInvoiceModal(false)}>Cancel</button>
+              </div>
+            ) : invoiceScanStep === 'scanning' ? (
+              <div className="invoice-scanning">
+                <div className="scan-laser-wrap">
+                  <div className="scan-laser" />
+                </div>
+                <p className="scanning-text">Scanning {invoiceIsMember ? 'ICA membership' : 'driving license'}...</p>
               </div>
             ) : (
-              <div className="invoice-field">
-                <label>Customer Email</label>
-                <input
-                  type="email"
-                  value={invoiceEmail}
-                  onChange={(e) => setInvoiceEmail(e.target.value)}
-                  placeholder="customer@example.com"
-                  autoFocus
-                />
-              </div>
+              <>
+                <div className="scan-success-badge">Scanned</div>
+                {invoiceIsMember ? (
+                  <div className="invoice-field">
+                    <label>ICA Membership Number</label>
+                    <input type="text" value={invoiceMembership} onChange={(e) => setInvoiceMembership(e.target.value)} />
+                  </div>
+                ) : (
+                  <div className="invoice-field">
+                    <label>Customer Email</label>
+                    <input type="email" value={invoiceEmail} onChange={(e) => setInvoiceEmail(e.target.value)} />
+                  </div>
+                )}
+                <div className="invoice-actions">
+                  <button className="invoice-submit-btn" onClick={submitInvoice} disabled={invoiceIsMember ? !invoiceMembership.trim() : !invoiceEmail.trim()}>
+                    Send Invoice
+                  </button>
+                  <button className="cancel-payment" onClick={() => setShowInvoiceModal(false)}>Cancel</button>
+                </div>
+              </>
             )}
-            <div className="invoice-actions">
-              <button
-                className="invoice-submit-btn"
-                onClick={submitInvoice}
-                disabled={invoiceIsMember ? !invoiceMembership.trim() : !invoiceEmail.trim()}
-              >
-                Send Invoice
-              </button>
-              <button className="cancel-payment" onClick={() => setShowInvoiceModal(false)}>
-                Cancel
-              </button>
-            </div>
           </div>
         </div>
       )}
