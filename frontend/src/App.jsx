@@ -178,6 +178,21 @@ export function App() {
   const [invoiceEmail, setInvoiceEmail] = useState('')
   const [invoiceMembership, setInvoiceMembership] = useState('')
   const [invoiceEmailSent, setInvoiceEmailSent] = useState(null)
+  const PRESETS = [
+    { name: 'Secure', emoji: '\uD83D\uDD12', color: '#064e3b', allow_invoice_members: false, allow_invoice_non_members: false, non_member_invoice_threshold: 0,
+      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay'] },
+    { name: 'Balance', emoji: '\u2696\uFE0F', color: '#059669', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 10,
+      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice'] },
+    { name: 'Fast', emoji: '\u26A1', color: '#10b981', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 50,
+      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice'] },
+    { name: 'Earnings', emoji: '\uD83D\uDCB0', color: '#34d399', allow_invoice_members: true, allow_invoice_non_members: true, non_member_invoice_threshold: 100,
+      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice', 'Non-Member Invoice'] },
+  ]
+  const activePreset = PRESETS.find(p =>
+    p.allow_invoice_members === adminSettings.allow_invoice_members &&
+    p.allow_invoice_non_members === adminSettings.allow_invoice_non_members &&
+    p.non_member_invoice_threshold === adminSettings.non_member_invoice_threshold
+  )?.name || null
   const [adminTab, setAdminTab] = useState('dashboard')
   const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
   const videoRef = useRef(null)
@@ -1190,46 +1205,97 @@ export function App() {
 
         {adminTab === 'settings' ? (
         <section className="panel admin-panel">
-          <div className="admin-settings-grid">
-            <div className="admin-toggle-row">
-              <label>Allow member invoices</label>
-              <div
-                className={`toggle-switch ${adminSettings.allow_invoice_members ? 'toggle-switch-on' : ''}`}
-                onClick={() => updateAdminSetting({ allow_invoice_members: !adminSettings.allow_invoice_members })}
+          <div className="presets-grid">
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                className={`preset-card${activePreset === preset.name ? ' preset-active' : ''}`}
+                style={{ '--preset-color': preset.color }}
+                onClick={() => updateAdminSetting({
+                  allow_invoice_members: preset.allow_invoice_members,
+                  allow_invoice_non_members: preset.allow_invoice_non_members,
+                  non_member_invoice_threshold: preset.non_member_invoice_threshold
+                })}
               >
-                <div className="toggle-knob" />
-              </div>
-            </div>
-            <div className="admin-toggle-row">
-              <label>Allow non-member invoices</label>
-              <div
-                className={`toggle-switch ${adminSettings.allow_invoice_non_members ? 'toggle-switch-on' : ''}`}
-                onClick={() => updateAdminSetting({ allow_invoice_non_members: !adminSettings.allow_invoice_non_members })}
-              >
-                <div className="toggle-knob" />
-              </div>
-            </div>
-            <div className="admin-toggle-row">
-              <label>Non-member invoice threshold</label>
-              <div className="threshold-input-group">
-                <input
-                  type="number"
-                  min="1"
-                  value={adminSettings.non_member_invoice_threshold}
-                  onChange={(e) => setAdminSettings(prev => ({ ...prev, non_member_invoice_threshold: parseInt(e.target.value) || 1 }))}
-                  className="threshold-input"
-                />
-                <button
-                  className="save-threshold-btn"
-                  onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
-                >
-                  Save
-                </button>
+                <div className="preset-emoji">{preset.emoji}</div>
+                <strong className="preset-name">{preset.name}</strong>
+                <ul className="preset-allowed">
+                  {preset.allowed.map(m => <li key={m}>{m}</li>)}
+                </ul>
+                {preset.non_member_invoice_threshold > 0 && (
+                  <span className="preset-threshold">Threshold: {preset.non_member_invoice_threshold}</span>
+                )}
+              </button>
+            ))}
+
+            <div className={`preset-card preset-custom${!activePreset ? ' preset-active' : ''}`} style={{ '--preset-color': '#047857' }}>
+              <div className="preset-emoji">{'\u2699\uFE0F'}</div>
+              <strong className="preset-name">Custom</strong>
+              <div className="preset-toggles">
+                <label>
+                  <span>Member invoices</span>
+                  <div
+                    className={`toggle-switch ${adminSettings.allow_invoice_members ? 'toggle-switch-on' : ''}`}
+                    onClick={() => updateAdminSetting({ allow_invoice_members: !adminSettings.allow_invoice_members })}
+                  ><div className="toggle-knob" /></div>
+                </label>
+                <label>
+                  <span>Non-member invoices</span>
+                  <div
+                    className={`toggle-switch ${adminSettings.allow_invoice_non_members ? 'toggle-switch-on' : ''}`}
+                    onClick={() => updateAdminSetting({ allow_invoice_non_members: !adminSettings.allow_invoice_non_members })}
+                  ><div className="toggle-knob" /></div>
+                </label>
+                <label>
+                  <span>Threshold</span>
+                  <div className="preset-threshold-input">
+                    <input
+                      type="number"
+                      min="0"
+                      value={adminSettings.non_member_invoice_threshold}
+                      onChange={(e) => setAdminSettings(prev => ({ ...prev, non_member_invoice_threshold: parseInt(e.target.value) || 0 }))}
+                      className="threshold-input"
+                    />
+                    <button
+                      className="save-threshold-btn"
+                      onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
+                    >Save</button>
+                  </div>
+                </label>
               </div>
             </div>
           </div>
 
-          <h3 style={{ marginTop: '1.5rem' }}>Invoice Statistics</h3>
+        </section>
+        ) : (
+        <div className="admin-layout">
+        <section className="panel">
+          <div className="dashboard-grid">
+            <div className="dash-card dash-card-primary">
+              <span className="dash-label">Total Transactions</span>
+              <span className="dash-value">{dashboardStats.total_transactions}</span>
+              <span className="dash-sub">{dashboardStats.total_sales.toFixed(2)} SEK</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Online</span>
+              <span className="dash-value dash-green">{dashboardStats.online_transactions}</span>
+              <span className="dash-sub">Synced to server</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Offline Synced</span>
+              <span className="dash-value dash-amber">{dashboardStats.offline_transactions - dashboardStats.offline_pending}</span>
+              <span className="dash-sub">Recovered after reconnect</span>
+            </div>
+            <div className="dash-card">
+              <span className="dash-label">Pending Sync</span>
+              <span className="dash-value dash-red">{dashboardStats.offline_pending}</span>
+              <span className="dash-sub">In local queue</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <h3>Invoice Statistics</h3>
           <div className="invoice-stats-grid">
             <div className="stat-card">
               <span className="stat-label">Total Invoices</span>
@@ -1260,32 +1326,6 @@ export function App() {
                 <span className="stat-sub">Non-member invoices approaching limit</span>
               </div>
             )}
-          </div>
-        </section>
-        ) : (
-        <div className="admin-layout">
-        <section className="panel">
-          <div className="dashboard-grid">
-            <div className="dash-card dash-card-primary">
-              <span className="dash-label">Total Transactions</span>
-              <span className="dash-value">{dashboardStats.total_transactions}</span>
-              <span className="dash-sub">{dashboardStats.total_sales.toFixed(2)} SEK</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-label">Online</span>
-              <span className="dash-value dash-green">{dashboardStats.online_transactions}</span>
-              <span className="dash-sub">Synced to server</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-label">Offline Synced</span>
-              <span className="dash-value dash-amber">{dashboardStats.offline_transactions - dashboardStats.offline_pending}</span>
-              <span className="dash-sub">Recovered after reconnect</span>
-            </div>
-            <div className="dash-card">
-              <span className="dash-label">Pending Sync</span>
-              <span className="dash-value dash-red">{dashboardStats.offline_pending}</span>
-              <span className="dash-sub">In local queue</span>
-            </div>
           </div>
         </section>
 

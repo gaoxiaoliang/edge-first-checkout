@@ -157,8 +157,8 @@ header h1 {
 .product-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: var(--ica-red-light);
-  background: var(--ica-surface);
+  border-color: var(--ica-green);
+  background: var(--ica-green-light);
 }
 
 .product-card:hover:not(:disabled) {
@@ -291,7 +291,7 @@ input, button {
 
 button {
   cursor: pointer;
-  background: var(--ica-red);
+  background: var(--ica-green);
   border: none;
   color: white;
   font-family: var(--font-heading);
@@ -303,9 +303,9 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background: var(--ica-red-dark);
+  background: #006016;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(207, 32, 5, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 122, 29, 0.3);
 }
 
 button:active:not(:disabled) {
@@ -356,8 +356,8 @@ button:active:not(:disabled) {
 }
 
 .menu-dropdown button:hover {
-  background: var(--ica-bg);
-  color: var(--ica-red);
+  background: var(--ica-green-light);
+  color: var(--ica-green);
   transform: none;
   box-shadow: none;
 }
@@ -1275,8 +1275,8 @@ button:active:not(:disabled) {
 }
 
 .admin-nav-item:hover {
-  color: var(--ica-text);
-  background: var(--ica-bg);
+  color: var(--ica-green);
+  background: var(--ica-green-light);
   transform: none;
   box-shadow: none;
 }
@@ -1335,6 +1335,130 @@ button:active:not(:disabled) {
 
 /* Admin Panel */
 .admin-panel {
+}
+
+/* Preset Cards */
+.presets-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.25rem 0.85rem;
+  min-height: 336px;
+  border-radius: var(--ica-radius);
+  border: 3px solid transparent;
+  background: var(--preset-color);
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.preset-card:hover { transform: translateY(-2px); }
+
+.preset-active {
+  border-color: white;
+  border-width: 5px;
+  box-shadow: 0 0 0 3px var(--preset-color), 0 4px 16px rgba(0,0,0,0.25);
+}
+
+.preset-emoji { font-size: 2.4rem; margin-bottom: 0.35rem; }
+
+.preset-name { font-size: 1.25rem; margin-bottom: 0.5rem; }
+
+.preset-allowed {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.95rem;
+  opacity: 0.9;
+  line-height: 1.7;
+}
+
+.preset-allowed li::before {
+  content: '\2713 ';
+  font-weight: 700;
+}
+
+.preset-threshold {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+/* Custom card */
+.preset-custom {
+  cursor: default;
+}
+
+.preset-custom:hover { transform: none; }
+
+.preset-toggles {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.preset-toggles label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  gap: 0.25rem;
+}
+
+.preset-toggles label span {
+  text-align: left;
+  flex: 1;
+}
+
+.preset-toggles .toggle-switch {
+  transform: scale(0.7);
+  flex-shrink: 0;
+  background: rgba(255,255,255,0.3);
+}
+
+.preset-toggles .toggle-switch .toggle-knob {
+  background: white;
+}
+
+.preset-toggles .toggle-switch-on {
+  background: white;
+}
+
+.preset-toggles .toggle-switch-on .toggle-knob {
+  background: #047857;
+}
+
+.preset-threshold-input {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.preset-threshold-input .threshold-input {
+  width: 42px;
+  padding: 0.15rem 0.25rem;
+  font-size: 0.65rem;
+  border-radius: 4px;
+}
+
+.preset-threshold-input .save-threshold-btn {
+  padding: 0.15rem 0.35rem;
+  font-size: 0.6rem;
+  border-radius: 4px;
+}
+
+@media (max-width: 700px) {
+  .presets-grid { grid-template-columns: repeat(2, 1fr); }
+  .preset-card { min-height: 180px; }
 }
 
 .admin-settings-grid {
