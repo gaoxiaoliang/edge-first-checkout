@@ -1352,23 +1352,28 @@ button.preset-card {
   min-height: 336px;
   border-radius: var(--ica-radius);
   border: 3px solid transparent;
-  background: var(--preset-color);
-  color: white;
+  background: color-mix(in srgb, var(--preset-color) 60%, #555);
+  color: rgba(255,255,255,0.7);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s;
+  opacity: 0.65;
+  transition: all 0.2s ease;
 }
 
 button.preset-card:hover {
   transform: translateY(-2px);
+  opacity: 0.85;
   background: color-mix(in srgb, var(--preset-color) 75%, white);
   box-shadow: none;
 }
 
-.preset-active {
-  border-color: white;
-  border-width: 5px;
-  box-shadow: 0 0 0 3px var(--preset-color), 0 4px 16px rgba(0,0,0,0.25);
+button.preset-card.preset-active {
+  background: var(--preset-color);
+  color: white;
+  opacity: 1;
+  border: 4px solid white;
+  box-shadow: 0 0 0 3px var(--preset-color), 0 4px 20px rgba(0,0,0,0.3);
+  transform: scale(1.03);
 }
 
 .preset-emoji { font-size: 2.4rem; margin-bottom: 0.35rem; }
@@ -1389,6 +1394,12 @@ button.preset-card:hover {
   font-weight: 700;
 }
 
+.preset-desc {
+  font-size: 0.9rem;
+  opacity: 0.85;
+  margin-top: 0.25rem;
+}
+
 .preset-threshold {
   margin-top: auto;
   padding-top: 0.5rem;
@@ -1404,6 +1415,13 @@ button.preset-card:hover {
   border: 2px solid #ddd;
   padding: 1.25rem;
   color: #1a1a1a;
+  transition: all 0.2s ease;
+}
+
+.custom-settings-panel.custom-active {
+  border-color: var(--ica-green);
+  border-width: 3px;
+  box-shadow: 0 0 0 3px rgba(0,122,29,0.2), 0 4px 16px rgba(0,0,0,0.1);
 }
 
 .custom-settings-header {

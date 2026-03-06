@@ -148,6 +148,13 @@ class SyncStatusResponse(BaseModel):
 
 
 class AdminSettingsResponse(BaseModel):
+    allow_cash: bool
+    allow_credit_card: bool
+    allow_swish: bool
+    allow_apple_pay: bool
+    allow_google_pay: bool
+    allow_scan_pay: bool
+    allow_invoice: bool
     allow_invoice_members: bool
     allow_invoice_non_members: bool
     non_member_invoice_threshold: int
@@ -156,6 +163,13 @@ class AdminSettingsResponse(BaseModel):
 
 
 class AdminSettingsUpdateRequest(BaseModel):
+    allow_cash: bool | None = None
+    allow_credit_card: bool | None = None
+    allow_swish: bool | None = None
+    allow_apple_pay: bool | None = None
+    allow_google_pay: bool | None = None
+    allow_scan_pay: bool | None = None
+    allow_invoice: bool | None = None
     allow_invoice_members: bool | None = None
     allow_invoice_non_members: bool | None = None
     non_member_invoice_threshold: int | None = None

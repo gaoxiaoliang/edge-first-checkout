@@ -61,6 +61,13 @@ async def init_db() -> None:
     # Seed default admin settings
     now = now_iso()
     defaults = {
+        "allow_cash": "true",
+        "allow_credit_card": "true",
+        "allow_swish": "true",
+        "allow_apple_pay": "true",
+        "allow_google_pay": "true",
+        "allow_scan_pay": "true",
+        "allow_invoice": "true",
         "allow_invoice_members": "true",
         "allow_invoice_non_members": "true",
         "non_member_invoice_threshold": "10",

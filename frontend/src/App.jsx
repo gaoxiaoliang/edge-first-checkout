@@ -154,7 +154,14 @@ export function App() {
     allow_invoice_non_members: true,
     non_member_invoice_threshold: 10,
     max_invoice_amount: 5000,
-    max_invoices_per_person: 3
+    max_invoices_per_person: 3,
+    allow_cash: true,
+    allow_credit_card: true,
+    allow_swish: true,
+    allow_apple_pay: true,
+    allow_google_pay: true,
+    allow_scan_pay: true,
+    allow_invoice: true
   })
   const [invoiceStats, setInvoiceStats] = useState({
     total_invoices: 0,
@@ -181,19 +188,36 @@ export function App() {
   const [invoiceMembership, setInvoiceMembership] = useState('')
   const [invoiceEmailSent, setInvoiceEmailSent] = useState(null)
   const PRESETS = [
-    { name: 'Secure', emoji: '\uD83D\uDD12', color: '#2563eb', allow_invoice_members: false, allow_invoice_non_members: false, non_member_invoice_threshold: 0,
-      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay'] },
-    { name: 'Balance', emoji: '\u2696\uFE0F', color: '#16a34a', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 10,
-      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice'] },
-    { name: 'Fast', emoji: '\u26A1', color: '#7c3aed', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 50,
-      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice'] },
-    { name: 'Earnings', emoji: '\uD83D\uDCB0', color: '#ca8a04', allow_invoice_members: true, allow_invoice_non_members: true, non_member_invoice_threshold: 100,
-      allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice', 'Non-Member Invoice'] },
+    { name: 'Secure', color: '#2563eb',
+      allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
+      allow_scan_pay: false, allow_invoice: false,
+      allow_invoice_members: false, allow_invoice_non_members: false, non_member_invoice_threshold: 0,
+      max_invoice_amount: 0, max_invoices_per_person: 0,
+      desc: 'Card & cash only' },
+    { name: 'Balance', color: '#16a34a',
+      allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
+      allow_scan_pay: true, allow_invoice: true,
+      allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 10,
+      max_invoice_amount: 2000, max_invoices_per_person: 3,
+      desc: 'Members can invoice' },
+    { name: 'Fast', color: '#7c3aed',
+      allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
+      allow_scan_pay: true, allow_invoice: true,
+      allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 50,
+      max_invoice_amount: 5000, max_invoices_per_person: 5,
+      desc: 'All methods, member invoice' },
+    { name: 'Earnings', color: '#ca8a04',
+      allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
+      allow_scan_pay: true, allow_invoice: true,
+      allow_invoice_members: true, allow_invoice_non_members: true, non_member_invoice_threshold: 100,
+      max_invoice_amount: 10000, max_invoices_per_person: 10,
+      desc: 'Everything enabled' },
   ]
+  const SETTING_KEYS = ['allow_cash','allow_credit_card','allow_swish','allow_apple_pay','allow_google_pay',
+    'allow_scan_pay','allow_invoice','allow_invoice_members','allow_invoice_non_members',
+    'non_member_invoice_threshold','max_invoice_amount','max_invoices_per_person']
   const activePreset = PRESETS.find(p =>
-    p.allow_invoice_members === adminSettings.allow_invoice_members &&
-    p.allow_invoice_non_members === adminSettings.allow_invoice_non_members &&
-    p.non_member_invoice_threshold === adminSettings.non_member_invoice_threshold
+    SETTING_KEYS.every(k => p[k] === adminSettings[k])
   )?.name || null
   const [adminTab, setAdminTab] = useState('dashboard')
   const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
@@ -1208,33 +1232,26 @@ export function App() {
         {adminTab === 'settings' ? (
         <section className="panel admin-panel">
           <div className="presets-grid">
-            {PRESETS.map((preset) => (
+            {PRESETS.map((preset) => {
+              const settings = {}
+              SETTING_KEYS.forEach(k => { settings[k] = preset[k] })
+              return (
               <button
                 key={preset.name}
                 className={`preset-card${activePreset === preset.name ? ' preset-active' : ''}`}
                 style={{ '--preset-color': preset.color }}
-                onClick={() => updateAdminSetting({
-                  allow_invoice_members: preset.allow_invoice_members,
-                  allow_invoice_non_members: preset.allow_invoice_non_members,
-                  non_member_invoice_threshold: preset.non_member_invoice_threshold
-                })}
+                onClick={() => updateAdminSetting(settings)}
               >
-                <div className="preset-emoji">{preset.emoji}</div>
                 <strong className="preset-name">{preset.name}</strong>
-                <ul className="preset-allowed">
-                  {preset.allowed.map(m => <li key={m}>{m}</li>)}
-                </ul>
-                {preset.non_member_invoice_threshold > 0 && (
-                  <span className="preset-threshold">Threshold: {preset.non_member_invoice_threshold}</span>
-                )}
+                <span className="preset-desc">{preset.desc}</span>
               </button>
-            ))}
+            )})}
 
           </div>
 
-          <div className="custom-settings-panel">
+          <div className={`custom-settings-panel${!activePreset ? ' custom-active' : ''}`}>
             <div className="custom-settings-header">
-              <strong>Custom Settings</strong>
+              <strong>Custom Settings{!activePreset ? ' (Active)' : ''}</strong>
             </div>
 
             <div className="custom-settings-section">
@@ -1244,8 +1261,8 @@ export function App() {
                   <label key={pt.id} className="payment-toggle-row">
                     <span className="payment-toggle-name">{pt.name}</span>
                     <div
-                      className={`toggle-switch ${adminSettings[`allow_${pt.id}`] !== false ? 'toggle-switch-on' : ''}`}
-                      onClick={() => updateAdminSetting({ [`allow_${pt.id}`]: adminSettings[`allow_${pt.id}`] === false ? true : false })}
+                      className={`toggle-switch ${adminSettings[`allow_${pt.id}`] ? 'toggle-switch-on' : ''}`}
+                      onClick={() => updateAdminSetting({ [`allow_${pt.id}`]: !adminSettings[`allow_${pt.id}`] })}
                     ><div className="toggle-knob" /></div>
                   </label>
                 ))}
