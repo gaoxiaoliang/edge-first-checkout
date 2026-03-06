@@ -1,25 +1,57 @@
 @startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName "Helvetica"
+skinparam componentStyle rectangle
+
 left to right direction
 
-actor Cashier
-node "Store Edge Terminal" {
+actor "Customer" as Customer
+actor "Store Owner" as Owner
+
+package "Store Edge (Browser)" #f0fdf4 {
   component "Self-Checkout UI\n(React)" as SC
   database "Local Queue\n(localStorage)" as LQ
 }
 
-cloud "Central Platform" {
-  component "Backend API\n(FastAPI + SQLite)" as API
-  component "Dashboard UI\n(React)" as DB
-  database "Central SQLite" as CDB
+package "Store Backend" #eff6ff {
+  component "FastAPI Server" as API
+  database "SQLite\n(WAL mode)" as SQLite
+  component "Email Service\n(SMTP)" as Email
 }
 
-Cashier --> SC : Scan / Add items
-SC --> API : /auth/login (JWT)
-SC --> API : /transactions (online)
-SC --> LQ : Cache tx (offline)
-SC --> API : /heartbeat
-SC --> API : /sync/offline (batch)
-API --> CDB : Idempotent writes
-DB --> API : Dashboard APIs
+package "Dashboard" #fefce8 {
+  component "Admin Dashboard\n(React)" as Dash
+}
+
+cloud "Couchbase Cloud" #fff1f2 {
+  database "ica-checkout\nbucket" as CB
+}
+
+Customer --> SC : Shop & Pay
+SC --> API : POST /transactions\n(online)
+SC --> LQ : Cache tx\n(offline)
+SC --> API : POST /heartbeat\n(every 5s)
+SC --> API : POST /sync/offline\n(batch recovery)
+API --> SQLite : Idempotent writes\n(UNIQUE constraint)
+API --> CB : Sync transactions\n& heartbeats
+API --> Email : Invoice emails\n(async)
+Owner --> Dash : Monitor & Configure
+Dash --> API : Dashboard APIs\n(poll every 5s)
+
+note right of LQ
+  **Offline-First Flow**
+  1. Heartbeat fails -> offline mode
+  2. Transactions saved to localStorage
+  3. Background sync every 4s when online
+  4. Idempotency keys prevent duplicates
+end note
+
+note right of CB
+  **Cloud Sync**
+  Best-effort replication
+  of all transactions and
+  terminal heartbeats
+end note
 
 @enduml
