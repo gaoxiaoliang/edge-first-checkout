@@ -105,6 +105,28 @@ header h1 {
   border-color: var(--ica-text-muted);
 }
 
+
+.emergency-banner {
+  background: #dc2626;
+  color: white;
+  text-align: center;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
+
+.emergency-payment-notice {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: var(--ica-radius);
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
 .panel {
   background: var(--ica-surface);
   border-radius: var(--ica-radius-lg);
