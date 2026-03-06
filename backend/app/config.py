@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     ecdsa_private_key: str = _DEFAULT_SYSTEM_PRIVATE_KEY
     ecdsa_public_key: str = _DEFAULT_SYSTEM_PUBLIC_KEY
 
+    # SMTP for invoice emails
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+
     # Couchbase Cloud
     couchbase_connection_string: str = ""
     couchbase_username: str = ""

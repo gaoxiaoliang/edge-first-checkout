@@ -1,3 +1,4 @@
+import asyncio
 import json
 import base64
 from contextlib import asynccontextmanager
@@ -13,6 +14,7 @@ from fastapi.responses import HTMLResponse
 
 from .database import get_db, init_db, now_iso, terminal_status
 from .config import settings
+from .email import send_invoice_email
 from .models import (
     AdminSettingsResponse,
     AdminSettingsUpdateRequest,
@@ -265,7 +267,27 @@ async def _record_transaction(
     row = await (
         await db.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,))
     ).fetchone()
+
+    # Look up terminal code for the email
+    terminal_row = await (
+        await db.execute("SELECT terminal_code FROM terminals WHERE id = ?", (terminal_id,))
+    ).fetchone()
     await db.close()
+
+    # Send invoice email in the background (non-blocking)
+    if is_invoice and customer_email:
+        asyncio.create_task(
+            send_invoice_email(
+                to_email=customer_email,
+                transaction_id=transaction_id,
+                total_amount=payload.total_amount,
+                item_count=item_count,
+                items_json=json.dumps({"items": [it.model_dump() for it in payload.items]}),
+                terminal_code=terminal_row["terminal_code"] if terminal_row else "unknown",
+                occurred_at=payload.occurred_at.isoformat(),
+                membership_number=membership_number,
+            )
+        )
 
     return _tx_response(row)
 
