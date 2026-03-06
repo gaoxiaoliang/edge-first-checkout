@@ -151,12 +151,16 @@ class AdminSettingsResponse(BaseModel):
     allow_invoice_members: bool
     allow_invoice_non_members: bool
     non_member_invoice_threshold: int
+    max_invoice_amount: int
+    max_invoices_per_person: int
 
 
 class AdminSettingsUpdateRequest(BaseModel):
     allow_invoice_members: bool | None = None
     allow_invoice_non_members: bool | None = None
     non_member_invoice_threshold: int | None = None
+    max_invoice_amount: int | None = None
+    max_invoices_per_person: int | None = None
 
 
 class InvoiceStatsResponse(BaseModel):

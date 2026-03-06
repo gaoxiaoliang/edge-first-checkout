@@ -497,12 +497,16 @@ async def get_admin_settings():
     rows = await (await db.execute("SELECT key, value FROM admin_settings")).fetchall()
     await db.close()
     s = {r["key"]: r["value"] for r in rows}
+    return _build_admin_settings_response(s)
+
+
+def _build_admin_settings_response(s: dict) -> AdminSettingsResponse:
     return AdminSettingsResponse(
         allow_invoice_members=s.get("allow_invoice_members") == "true",
         allow_invoice_non_members=s.get("allow_invoice_non_members") == "true",
-        non_member_invoice_threshold=int(
-            s.get("non_member_invoice_threshold", "10")
-        ),
+        non_member_invoice_threshold=int(s.get("non_member_invoice_threshold", "10")),
+        max_invoice_amount=int(s.get("max_invoice_amount", "5000")),
+        max_invoices_per_person=int(s.get("max_invoices_per_person", "3")),
     )
 
 
@@ -510,32 +514,25 @@ async def get_admin_settings():
 async def update_admin_settings(payload: AdminSettingsUpdateRequest):
     db = await get_db()
     now = now_iso()
-    if payload.allow_invoice_members is not None:
-        await db.execute(
-            "UPDATE admin_settings SET value = ?, updated_at = ? WHERE key = 'allow_invoice_members'",
-            (str(payload.allow_invoice_members).lower(), now),
-        )
-    if payload.allow_invoice_non_members is not None:
-        await db.execute(
-            "UPDATE admin_settings SET value = ?, updated_at = ? WHERE key = 'allow_invoice_non_members'",
-            (str(payload.allow_invoice_non_members).lower(), now),
-        )
-    if payload.non_member_invoice_threshold is not None:
-        await db.execute(
-            "UPDATE admin_settings SET value = ?, updated_at = ? WHERE key = 'non_member_invoice_threshold'",
-            (str(payload.non_member_invoice_threshold), now),
-        )
+    updates = {
+        "allow_invoice_members": (lambda v: str(v).lower()) if payload.allow_invoice_members is not None else None,
+        "allow_invoice_non_members": (lambda v: str(v).lower()) if payload.allow_invoice_non_members is not None else None,
+        "non_member_invoice_threshold": str if payload.non_member_invoice_threshold is not None else None,
+        "max_invoice_amount": str if payload.max_invoice_amount is not None else None,
+        "max_invoices_per_person": str if payload.max_invoices_per_person is not None else None,
+    }
+    for key, transform in updates.items():
+        value = getattr(payload, key, None)
+        if value is not None and transform is not None:
+            await db.execute(
+                "INSERT INTO admin_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?",
+                (key, transform(value), now, transform(value), now),
+            )
     await db.commit()
     rows = await (await db.execute("SELECT key, value FROM admin_settings")).fetchall()
     await db.close()
     s = {r["key"]: r["value"] for r in rows}
-    return AdminSettingsResponse(
-        allow_invoice_members=s.get("allow_invoice_members") == "true",
-        allow_invoice_non_members=s.get("allow_invoice_non_members") == "true",
-        non_member_invoice_threshold=int(
-            s.get("non_member_invoice_threshold", "10")
-        ),
-    )
+    return _build_admin_settings_response(s)
 
 
 @app.get("/admin/invoice-stats", response_model=InvoiceStatsResponse)

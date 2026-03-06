@@ -152,7 +152,9 @@ export function App() {
   const [adminSettings, setAdminSettings] = useState({
     allow_invoice_members: true,
     allow_invoice_non_members: true,
-    non_member_invoice_threshold: 10
+    non_member_invoice_threshold: 10,
+    max_invoice_amount: 5000,
+    max_invoices_per_person: 3
   })
   const [invoiceStats, setInvoiceStats] = useState({
     total_invoices: 0,
@@ -179,13 +181,13 @@ export function App() {
   const [invoiceMembership, setInvoiceMembership] = useState('')
   const [invoiceEmailSent, setInvoiceEmailSent] = useState(null)
   const PRESETS = [
-    { name: 'Secure', emoji: '\uD83D\uDD12', color: '#064e3b', allow_invoice_members: false, allow_invoice_non_members: false, non_member_invoice_threshold: 0,
+    { name: 'Secure', emoji: '\uD83D\uDD12', color: '#2563eb', allow_invoice_members: false, allow_invoice_non_members: false, non_member_invoice_threshold: 0,
       allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay'] },
-    { name: 'Balance', emoji: '\u2696\uFE0F', color: '#059669', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 10,
+    { name: 'Balance', emoji: '\u2696\uFE0F', color: '#16a34a', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 10,
       allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice'] },
-    { name: 'Fast', emoji: '\u26A1', color: '#10b981', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 50,
+    { name: 'Fast', emoji: '\u26A1', color: '#7c3aed', allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 50,
       allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice'] },
-    { name: 'Earnings', emoji: '\uD83D\uDCB0', color: '#34d399', allow_invoice_members: true, allow_invoice_non_members: true, non_member_invoice_threshold: 100,
+    { name: 'Earnings', emoji: '\uD83D\uDCB0', color: '#ca8a04', allow_invoice_members: true, allow_invoice_non_members: true, non_member_invoice_threshold: 100,
       allowed: ['Cash', 'Card', 'Swish', 'Apple/Google Pay', 'Member Invoice', 'Non-Member Invoice'] },
   ]
   const activePreset = PRESETS.find(p =>
@@ -1228,9 +1230,30 @@ export function App() {
               </button>
             ))}
 
-            <div className={`preset-card preset-custom${!activePreset ? ' preset-active' : ''}`} style={{ '--preset-color': '#047857' }}>
-              <div className="preset-emoji">{'\u2699\uFE0F'}</div>
-              <strong className="preset-name">Custom</strong>
+          </div>
+
+          <div className="custom-settings-panel">
+            <div className="custom-settings-header">
+              <strong>Custom Settings</strong>
+            </div>
+
+            <div className="custom-settings-section">
+              <h4>Payment Methods</h4>
+              <div className="payment-toggles-grid">
+                {[...PAYMENT_TYPES, SCAN_PAY_TYPE, INVOICE_TYPE].map((pt) => (
+                  <label key={pt.id} className="payment-toggle-row">
+                    <span className="payment-toggle-name">{pt.name}</span>
+                    <div
+                      className={`toggle-switch ${adminSettings[`allow_${pt.id}`] !== false ? 'toggle-switch-on' : ''}`}
+                      onClick={() => updateAdminSetting({ [`allow_${pt.id}`]: adminSettings[`allow_${pt.id}`] === false ? true : false })}
+                    ><div className="toggle-knob" /></div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="custom-settings-section">
+              <h4>Invoice Options</h4>
               <div className="preset-toggles">
                 <label>
                   <span>Member invoices</span>
@@ -1247,7 +1270,7 @@ export function App() {
                   ><div className="toggle-knob" /></div>
                 </label>
                 <label>
-                  <span>Threshold</span>
+                  <span>Non-member threshold</span>
                   <div className="preset-threshold-input">
                     <input
                       type="number"
@@ -1259,6 +1282,38 @@ export function App() {
                     <button
                       className="save-threshold-btn"
                       onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
+                    >Save</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Max invoice amount (SEK)</span>
+                  <div className="preset-threshold-input">
+                    <input
+                      type="number"
+                      min="0"
+                      value={adminSettings.max_invoice_amount}
+                      onChange={(e) => setAdminSettings(prev => ({ ...prev, max_invoice_amount: parseInt(e.target.value) || 0 }))}
+                      className="threshold-input"
+                    />
+                    <button
+                      className="save-threshold-btn"
+                      onClick={() => updateAdminSetting({ max_invoice_amount: adminSettings.max_invoice_amount })}
+                    >Save</button>
+                  </div>
+                </label>
+                <label>
+                  <span>Max invoices per person</span>
+                  <div className="preset-threshold-input">
+                    <input
+                      type="number"
+                      min="1"
+                      value={adminSettings.max_invoices_per_person}
+                      onChange={(e) => setAdminSettings(prev => ({ ...prev, max_invoices_per_person: parseInt(e.target.value) || 1 }))}
+                      className="threshold-input"
+                    />
+                    <button
+                      className="save-threshold-btn"
+                      onClick={() => updateAdminSetting({ max_invoices_per_person: adminSettings.max_invoices_per_person })}
                     >Save</button>
                   </div>
                 </label>

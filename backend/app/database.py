@@ -64,6 +64,8 @@ async def init_db() -> None:
         "allow_invoice_members": "true",
         "allow_invoice_non_members": "true",
         "non_member_invoice_threshold": "10",
+        "max_invoice_amount": "5000",
+        "max_invoices_per_person": "3",
     }
     for key, value in defaults.items():
         await db.execute(
