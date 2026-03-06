@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     ecdsa_private_key: str = _DEFAULT_SYSTEM_PRIVATE_KEY
     ecdsa_public_key: str = _DEFAULT_SYSTEM_PUBLIC_KEY
 
+    # Couchbase Cloud
+    couchbase_connection_string: str = ""
+    couchbase_username: str = ""
+    couchbase_password: str = ""
+    couchbase_bucket: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

@@ -1,2 +1,4 @@
 opencode.md
 .DS_Store
+.env
+*.db
