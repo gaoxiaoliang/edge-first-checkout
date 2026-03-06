@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 
 from .database import get_db, init_db, now_iso, terminal_status
 from .config import settings
+from .couchbase_sync import init_couchbase, sync_transaction, sync_heartbeat, is_connected
 from .email import send_invoice_email
 from .models import (
     AdminSettingsResponse,
@@ -44,6 +45,7 @@ from .security import (
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
+    init_couchbase()
     yield
 
 
@@ -60,6 +62,14 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/dashboard/couchbase-status")
+async def couchbase_status() -> dict:
+    return {
+        "connected": is_connected(),
+        "bucket": settings.couchbase_bucket or None,
+    }
 
 
 @app.post("/terminals", response_model=TerminalCreateResponse)
@@ -274,6 +284,26 @@ async def _record_transaction(
     ).fetchone()
     await db.close()
 
+    # Sync to Couchbase (best-effort, non-blocking)
+    t_code = terminal_row["terminal_code"] if terminal_row else "unknown"
+    sync_transaction(transaction_id, t_code, {
+        "type": "transaction",
+        "transaction_id": transaction_id,
+        "terminal_id": terminal_id,
+        "terminal_code": t_code,
+        "idempotency_key": payload.idempotency_key,
+        "total_amount": payload.total_amount,
+        "item_count": item_count,
+        "items": [it.model_dump() for it in payload.items],
+        "occurred_at": payload.occurred_at.isoformat(),
+        "created_at": created_at,
+        "synced_from_offline": bool(payload.offline_created),
+        "payment_type": payment_type,
+        "is_invoice": bool(is_invoice),
+        "customer_email": customer_email,
+        "membership_number": membership_number,
+    })
+
     # Send invoice email in the background (non-blocking)
     if is_invoice and customer_email:
         asyncio.create_task(
@@ -331,6 +361,7 @@ async def heartbeat(
     terminal_code: str = Depends(get_current_terminal_code),
 ) -> dict:
     terminal_id, _ = await _resolve_terminal_id(terminal_code)
+    now = now_iso()
     db = await get_db()
     await db.execute(
         """
@@ -338,10 +369,11 @@ async def heartbeat(
         SET last_seen_at = ?, pending_sync_count = ?, updated_at = ?
         WHERE id = ?
         """,
-        (now_iso(), payload.current_load, now_iso(), terminal_id),
+        (now, payload.current_load, now, terminal_id),
     )
     await db.commit()
     await db.close()
+    sync_heartbeat(terminal_code, now, payload.current_load)
     return {"status": "alive"}
 
 
