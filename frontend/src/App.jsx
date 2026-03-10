@@ -514,6 +514,22 @@ export function App() {
     } catch { /* offline - optimistic update stays */ }
   }
 
+  const saveAllAdminSettings = async () => {
+    const keys = ['allow_cash','allow_credit_card','allow_swish','allow_apple_pay','allow_google_pay',
+      'allow_scan_pay','allow_invoice','allow_invoice_members','allow_invoice_non_members',
+      'non_member_invoice_threshold','max_invoice_amount','max_invoices_per_person','offline_card_limit']
+    const payload = {}
+    keys.forEach(k => { payload[k] = adminSettings[k] })
+    try {
+      const res = await fetch(`${API_BASE}/admin/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (res.ok) setAdminSettings(await res.json())
+    } catch { /* offline - optimistic update stays */ }
+  }
+
   const simulateInvoiceScan = () => {
     setInvoiceScanStep('scanning')
     setTimeout(() => {
@@ -1344,7 +1360,7 @@ export function App() {
                     <span className="payment-toggle-name">{pt.name}</span>
                     <div
                       className={`toggle-switch ${adminSettings[`allow_${pt.id}`] ? 'toggle-switch-on' : ''}`}
-                      onClick={() => updateAdminSetting({ [`allow_${pt.id}`]: !adminSettings[`allow_${pt.id}`] })}
+                      onClick={() => setAdminSettings(prev => ({ ...prev, [`allow_${pt.id}`]: !prev[`allow_${pt.id}`] }))}
                     ><div className="toggle-knob" /></div>
                   </label>
                 ))}
@@ -1358,63 +1374,45 @@ export function App() {
                   <span>Member invoices</span>
                   <div
                     className={`toggle-switch ${adminSettings.allow_invoice_members ? 'toggle-switch-on' : ''}`}
-                    onClick={() => updateAdminSetting({ allow_invoice_members: !adminSettings.allow_invoice_members })}
+                    onClick={() => setAdminSettings(prev => ({ ...prev, allow_invoice_members: !prev.allow_invoice_members }))}
                   ><div className="toggle-knob" /></div>
                 </label>
                 <label>
                   <span>Non-member invoices</span>
                   <div
                     className={`toggle-switch ${adminSettings.allow_invoice_non_members ? 'toggle-switch-on' : ''}`}
-                    onClick={() => updateAdminSetting({ allow_invoice_non_members: !adminSettings.allow_invoice_non_members })}
+                    onClick={() => setAdminSettings(prev => ({ ...prev, allow_invoice_non_members: !prev.allow_invoice_non_members }))}
                   ><div className="toggle-knob" /></div>
                 </label>
                 <label>
                   <span>Non-member threshold</span>
-                  <div className="preset-threshold-input">
-                    <input
-                      type="number"
-                      min="0"
-                      value={adminSettings.non_member_invoice_threshold}
-                      onChange={(e) => setAdminSettings(prev => ({ ...prev, non_member_invoice_threshold: parseInt(e.target.value) || 0 }))}
-                      className="threshold-input"
-                    />
-                    <button
-                      className="save-threshold-btn"
-                      onClick={() => updateAdminSetting({ non_member_invoice_threshold: adminSettings.non_member_invoice_threshold })}
-                    >Save</button>
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={adminSettings.non_member_invoice_threshold}
+                    onChange={(e) => setAdminSettings(prev => ({ ...prev, non_member_invoice_threshold: parseInt(e.target.value) || 0 }))}
+                    className="threshold-input"
+                  />
                 </label>
                 <label>
                   <span>Max invoice amount (SEK)</span>
-                  <div className="preset-threshold-input">
-                    <input
-                      type="number"
-                      min="0"
-                      value={adminSettings.max_invoice_amount}
-                      onChange={(e) => setAdminSettings(prev => ({ ...prev, max_invoice_amount: parseInt(e.target.value) || 0 }))}
-                      className="threshold-input"
-                    />
-                    <button
-                      className="save-threshold-btn"
-                      onClick={() => updateAdminSetting({ max_invoice_amount: adminSettings.max_invoice_amount })}
-                    >Save</button>
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={adminSettings.max_invoice_amount}
+                    onChange={(e) => setAdminSettings(prev => ({ ...prev, max_invoice_amount: parseInt(e.target.value) || 0 }))}
+                    className="threshold-input"
+                  />
                 </label>
                 <label>
                   <span>Max invoices per person</span>
-                  <div className="preset-threshold-input">
-                    <input
-                      type="number"
-                      min="1"
-                      value={adminSettings.max_invoices_per_person}
-                      onChange={(e) => setAdminSettings(prev => ({ ...prev, max_invoices_per_person: parseInt(e.target.value) || 1 }))}
-                      className="threshold-input"
-                    />
-                    <button
-                      className="save-threshold-btn"
-                      onClick={() => updateAdminSetting({ max_invoices_per_person: adminSettings.max_invoices_per_person })}
-                    >Save</button>
-                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    value={adminSettings.max_invoices_per_person}
+                    onChange={(e) => setAdminSettings(prev => ({ ...prev, max_invoices_per_person: parseInt(e.target.value) || 1 }))}
+                    className="threshold-input"
+                  />
                 </label>
               </div>
             </div>
@@ -1424,21 +1422,19 @@ export function App() {
               <div className="preset-toggles">
                 <label>
                   <span>Offline card limit (SEK)</span>
-                  <div className="preset-threshold-input">
-                    <input
-                      type="number"
-                      min="0"
-                      value={adminSettings.offline_card_limit}
-                      onChange={(e) => setAdminSettings(prev => ({ ...prev, offline_card_limit: parseInt(e.target.value) || 0 }))}
-                      className="threshold-input"
-                    />
-                    <button
-                      className="save-threshold-btn"
-                      onClick={() => updateAdminSetting({ offline_card_limit: adminSettings.offline_card_limit })}
-                    >Save</button>
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    value={adminSettings.offline_card_limit}
+                    onChange={(e) => setAdminSettings(prev => ({ ...prev, offline_card_limit: parseInt(e.target.value) || 0 }))}
+                    className="threshold-input"
+                  />
                 </label>
               </div>
+            </div>
+
+            <div className="settings-save-all">
+              <button className="save-threshold-btn settings-save-all-btn" onClick={saveAllAdminSettings}>Save All Settings</button>
             </div>
           </div>
 
