@@ -537,7 +537,7 @@ _BOOL_SETTINGS = [
     "allow_google_pay", "allow_scan_pay", "allow_invoice",
     "allow_invoice_members", "allow_invoice_non_members",
 ]
-_INT_SETTINGS = ["non_member_invoice_threshold", "max_invoice_amount", "max_invoices_per_person"]
+_INT_SETTINGS = ["non_member_invoice_threshold", "max_invoice_amount", "max_invoices_per_person", "offline_card_limit"]
 
 
 def _build_admin_settings_response(s: dict) -> AdminSettingsResponse:

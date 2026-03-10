@@ -538,6 +538,33 @@ button:active:not(:disabled) {
   color: var(--ica-text);
 }
 
+.payment-option-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--ica-border-light) !important;
+}
+
+.payment-option-disabled:hover {
+  transform: none;
+  background: var(--ica-bg);
+  border-color: var(--ica-border-light);
+}
+
+.payment-limit-info {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ica-text-muted);
+  background: var(--ica-border-light);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--ica-radius);
+}
+
+.payment-limit-exceeded {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
 .cancel-payment {
   margin-top: 1rem;
   width: 100%;
