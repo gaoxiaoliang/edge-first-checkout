@@ -38,8 +38,8 @@ const CATALOG = [
 
 const PAYMENT_TYPES = [
   { id: 'cash', name: 'Cash', icon: '💵', color: '#16a34a' },
-  { id: 'credit_card', name: 'Credit Card', icon: '💳', color: '#2563eb' },
-  { id: 'swish', name: 'Swish', icon: '📱', color: '#7c3aed' },
+  { id: 'credit_card', name: 'Card', icon: '💳', color: '#2563eb' },
+  { id: 'swish', name: 'Swish', icon: <svg viewBox="0 0 32 32" width="28" height="28" fill="none"><circle cx="16" cy="16" r="16" fill="#391F6B"/><path d="M9.5 20.5c1.2 2.2 3.8 3 6 1.8 1-.5 1.6-1.3 2.4-2.3l2.4-3.2c.6-.8 1.1-1.4 1.8-1.8 1.5-.8 3.2-.2 3.8 1" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" fill="none"/><path d="M22.5 11.5c-1.2-2.2-3.8-3-6-1.8-1 .5-1.6 1.3-2.4 2.3l-2.4 3.2c-.6.8-1.1 1.4-1.8 1.8-1.5.8-3.2.2-3.8-1" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" fill="none"/></svg>, color: '#391F6B' },
   { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', color: '#0f172a' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', color: '#ea580c' }
 ]
@@ -161,7 +161,8 @@ export function App() {
     allow_apple_pay: true,
     allow_google_pay: true,
     allow_scan_pay: true,
-    allow_invoice: true
+    allow_invoice: true,
+    offline_card_limit: 400
   })
   const [invoiceStats, setInvoiceStats] = useState({
     total_invoices: 0,
@@ -192,30 +193,30 @@ export function App() {
       allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
       allow_scan_pay: false, allow_invoice: false,
       allow_invoice_members: false, allow_invoice_non_members: false, non_member_invoice_threshold: 0,
-      max_invoice_amount: 0, max_invoices_per_person: 0,
+      max_invoice_amount: 0, max_invoices_per_person: 0, offline_card_limit: 400,
       desc: 'Card & cash only' },
     { name: 'Balance', color: '#16a34a',
       allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
       allow_scan_pay: true, allow_invoice: true,
       allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 10,
-      max_invoice_amount: 2000, max_invoices_per_person: 3,
+      max_invoice_amount: 2000, max_invoices_per_person: 3, offline_card_limit: 400,
       desc: 'Members can invoice' },
     { name: 'Fast', color: '#7c3aed',
       allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
       allow_scan_pay: true, allow_invoice: true,
       allow_invoice_members: true, allow_invoice_non_members: false, non_member_invoice_threshold: 50,
-      max_invoice_amount: 5000, max_invoices_per_person: 5,
+      max_invoice_amount: 5000, max_invoices_per_person: 5, offline_card_limit: 400,
       desc: 'All methods, member invoice' },
     { name: 'Earnings', color: '#ca8a04',
       allow_cash: true, allow_credit_card: true, allow_swish: true, allow_apple_pay: true, allow_google_pay: true,
       allow_scan_pay: true, allow_invoice: true,
       allow_invoice_members: true, allow_invoice_non_members: true, non_member_invoice_threshold: 100,
-      max_invoice_amount: 10000, max_invoices_per_person: 10,
+      max_invoice_amount: 10000, max_invoices_per_person: 10, offline_card_limit: 400,
       desc: 'Everything enabled' },
   ]
   const SETTING_KEYS = ['allow_cash','allow_credit_card','allow_swish','allow_apple_pay','allow_google_pay',
     'allow_scan_pay','allow_invoice','allow_invoice_members','allow_invoice_non_members',
-    'non_member_invoice_threshold','max_invoice_amount','max_invoices_per_person']
+    'non_member_invoice_threshold','max_invoice_amount','max_invoices_per_person','offline_card_limit']
   const activePreset = PRESETS.find(p =>
     SETTING_KEYS.every(k => p[k] === adminSettings[k])
   )?.name || null
@@ -1342,6 +1343,28 @@ export function App() {
                 </label>
               </div>
             </div>
+
+            <div className="custom-settings-section">
+              <h4>Offline Settings</h4>
+              <div className="preset-toggles">
+                <label>
+                  <span>Offline card limit (SEK)</span>
+                  <div className="preset-threshold-input">
+                    <input
+                      type="number"
+                      min="0"
+                      value={adminSettings.offline_card_limit}
+                      onChange={(e) => setAdminSettings(prev => ({ ...prev, offline_card_limit: parseInt(e.target.value) || 0 }))}
+                      className="threshold-input"
+                    />
+                    <button
+                      className="save-threshold-btn"
+                      onClick={() => updateAdminSetting({ offline_card_limit: adminSettings.offline_card_limit })}
+                    >Save</button>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
 
         </section>
@@ -1657,23 +1680,35 @@ export function App() {
                 <h2>Select Payment Method</h2>
                 <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
                 {!networkOnline && (
-                  <p className="offline-payment-notice">Offline mode: Cash, Scan & Pay, or Invoice available</p>
+                  <div className="offline-payment-badge">Offline</div>
                 )}
                 <div className="payment-options">
                   {PAYMENT_TYPES
-                    .filter((pt) => networkOnline || pt.id === 'cash')
-                    .map((pt) => (
+                    .filter((pt) => networkOnline || pt.id === 'cash' || pt.id === 'credit_card' || pt.id === 'swish')
+                    .filter((pt) => adminSettings[`allow_${pt.id}`] !== false)
+                    .map((pt) => {
+                      const offlineCardOverLimit = !networkOnline && pt.id === 'credit_card' && total > adminSettings.offline_card_limit
+                      return (
                     <button
                       key={pt.id}
-                      className="payment-option"
+                      className={`payment-option${offlineCardOverLimit ? ' payment-option-disabled' : ''}`}
                       style={{ '--payment-color': pt.color }}
-                      onClick={() => processPayment(pt.id)}
+                      onClick={() => !offlineCardOverLimit && processPayment(pt.id)}
+                      disabled={offlineCardOverLimit}
                     >
                       <span className="payment-icon">{pt.icon}</span>
                       <span className="payment-name">{pt.name}</span>
+                      {!networkOnline && pt.id === 'credit_card' && (
+                        <span className={`payment-limit-info${offlineCardOverLimit ? ' payment-limit-exceeded' : ''}`}>
+                          {offlineCardOverLimit
+                            ? `Exceeds ${adminSettings.offline_card_limit} SEK limit`
+                            : `Max ${adminSettings.offline_card_limit} SEK offline`}
+                        </span>
+                      )}
                     </button>
-                  ))}
-                  {!networkOnline && (
+                    )
+                  })}
+                  {!networkOnline && adminSettings.allow_scan_pay !== false && (
                     <button
                       className="payment-option"
                       style={{ '--payment-color': SCAN_PAY_TYPE.color }}
@@ -1683,7 +1718,7 @@ export function App() {
                       <span className="payment-name">{SCAN_PAY_TYPE.name}</span>
                     </button>
                   )}
-                  {!networkOnline && (
+                  {!networkOnline && adminSettings.allow_invoice !== false && (
                     <button
                       className="payment-option"
                       style={{ '--payment-color': INVOICE_TYPE.color }}

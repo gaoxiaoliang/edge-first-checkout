@@ -160,6 +160,7 @@ class AdminSettingsResponse(BaseModel):
     non_member_invoice_threshold: int
     max_invoice_amount: int
     max_invoices_per_person: int
+    offline_card_limit: int
 
 
 class AdminSettingsUpdateRequest(BaseModel):
@@ -175,6 +176,7 @@ class AdminSettingsUpdateRequest(BaseModel):
     non_member_invoice_threshold: int | None = None
     max_invoice_amount: int | None = None
     max_invoices_per_person: int | None = None
+    offline_card_limit: int | None = None
 
 
 class InvoiceStatsResponse(BaseModel):
