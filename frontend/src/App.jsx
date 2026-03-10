@@ -38,7 +38,7 @@ const CATALOG = [
 
 const PAYMENT_TYPES = [
   { id: 'cash', name: 'Cash', icon: '💵', color: '#16a34a' },
-  { id: 'credit_card', name: 'Credit Card', icon: '💳', color: '#2563eb' },
+  { id: 'credit_card', name: 'Card', icon: '💳', color: '#2563eb' },
   { id: 'swish', name: 'Swish', icon: '📱', color: '#7c3aed' },
   { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', color: '#0f172a' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', color: '#ea580c' }
@@ -1680,7 +1680,7 @@ export function App() {
                 <h2>Select Payment Method</h2>
                 <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
                 {!networkOnline && (
-                  <p className="offline-payment-notice">Offline mode: Cash, Card (max {adminSettings.offline_card_limit} SEK), Scan & Pay, or Invoice</p>
+                  <div className="offline-payment-badge">Offline</div>
                 )}
                 <div className="payment-options">
                   {PAYMENT_TYPES
