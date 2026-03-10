@@ -1684,7 +1684,7 @@ export function App() {
                 )}
                 <div className="payment-options">
                   {PAYMENT_TYPES
-                    .filter((pt) => networkOnline || pt.id === 'cash' || pt.id === 'credit_card')
+                    .filter((pt) => networkOnline || pt.id === 'cash' || pt.id === 'credit_card' || pt.id === 'swish')
                     .filter((pt) => adminSettings[`allow_${pt.id}`] !== false)
                     .map((pt) => {
                       const offlineCardOverLimit = !networkOnline && pt.id === 'credit_card' && total > adminSettings.offline_card_limit
