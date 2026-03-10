@@ -128,9 +128,7 @@ export function App() {
   const [cart, setCart] = useState([])
   const [realNetworkOnline, setRealNetworkOnline] = useState(false)  // 真实网络状态
   const [forceOffline, setForceOffline] = useState(false)  // 强制离线模式
-  const [emergencyMode, setEmergencyMode] = useState(false) // User also offline - emergency payment restrictions
   const networkOnline = realNetworkOnline && !forceOffline  // 最终使用的网络状态
-  const EMERGENCY_CARD_LIMIT = 400 // SEK - max card payment in emergency mode
   const [syncCount, setSyncCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState('checkout')
@@ -1127,13 +1125,6 @@ export function App() {
               {forceOffline ? 'Exit Store Offline' : 'Simulate Store Offline'}
             </button>
           )}
-          <button
-            className="force-offline-btn"
-            onClick={() => setEmergencyMode((prev) => !prev)}
-            title={emergencyMode ? 'Exit buyers offline mode' : 'Simulate buyers offline — emergency payment restrictions'}
-          >
-            {emergencyMode ? 'Exit Buyers Offline' : 'Simulate Buyers Offline'}
-          </button>
           {token && (
             <div className="menu-wrap">
               <button className="menu-button" onClick={() => setMenuOpen((prev) => !prev)}>
@@ -1153,12 +1144,6 @@ export function App() {
           )}
         </div>
       </header>
-
-      {emergencyMode && (
-        <div className="emergency-banner">
-          Emergency Mode — Limited payment options: Card under {EMERGENCY_CARD_LIMIT} SEK, Scan & Pay, Invoice
-        </div>
-      )}
 
       {activeView === 'terminal-info' ? (
         <section className="panel terminal-info-panel">
@@ -1665,78 +1650,42 @@ export function App() {
               <>
                 <h2>Select Payment Method</h2>
                 <p className="payment-total">Total: <strong>{total.toFixed(2)} SEK</strong></p>
-                {emergencyMode && (
-                  <p className="emergency-payment-notice">Emergency mode: Invoice, Scan & Pay, and Card under {EMERGENCY_CARD_LIMIT} SEK only</p>
-                )}
-                {!networkOnline && !emergencyMode && (
+                {!networkOnline && (
                   <p className="offline-payment-notice">Offline mode: Cash, Scan & Pay, or Invoice available</p>
                 )}
                 <div className="payment-options">
-                  {emergencyMode ? (
-                    <>
-                      {total <= EMERGENCY_CARD_LIMIT && (
-                        <button
-                          className="payment-option"
-                          style={{ '--payment-color': PAYMENT_TYPES.find(p => p.id === 'credit_card').color }}
-                          onClick={() => processPayment('credit_card')}
-                        >
-                          <span className="payment-icon">{PAYMENT_TYPES.find(p => p.id === 'credit_card').icon}</span>
-                          <span className="payment-name">Card (under {EMERGENCY_CARD_LIMIT} SEK)</span>
-                        </button>
-                      )}
-                      <button
-                        className="payment-option"
-                        style={{ '--payment-color': SCAN_PAY_TYPE.color }}
-                        onClick={processScanPay}
-                      >
-                        <span className="payment-icon">{SCAN_PAY_TYPE.icon}</span>
-                        <span className="payment-name">{SCAN_PAY_TYPE.name}</span>
-                      </button>
-                      <button
-                        className="payment-option"
-                        style={{ '--payment-color': INVOICE_TYPE.color }}
-                        onClick={() => { setShowInvoiceModal(true); setInvoiceIsMember(false); setInvoiceEmail(''); setInvoiceMembership(''); setInvoiceScanStep('choose') }}
-                      >
-                        <span className="payment-icon">{INVOICE_TYPE.icon}</span>
-                        <span className="payment-name">{INVOICE_TYPE.name}</span>
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {PAYMENT_TYPES
-                        .filter((pt) => networkOnline || pt.id === 'cash')
-                        .map((pt) => (
-                        <button
-                          key={pt.id}
-                          className="payment-option"
-                          style={{ '--payment-color': pt.color }}
-                          onClick={() => processPayment(pt.id)}
-                        >
-                          <span className="payment-icon">{pt.icon}</span>
-                          <span className="payment-name">{pt.name}</span>
-                        </button>
-                      ))}
-                      {!networkOnline && (
-                        <button
-                          className="payment-option"
-                          style={{ '--payment-color': SCAN_PAY_TYPE.color }}
-                          onClick={processScanPay}
-                        >
-                          <span className="payment-icon">{SCAN_PAY_TYPE.icon}</span>
-                          <span className="payment-name">{SCAN_PAY_TYPE.name}</span>
-                        </button>
-                      )}
-                      {!networkOnline && (
-                        <button
-                          className="payment-option"
-                          style={{ '--payment-color': INVOICE_TYPE.color }}
-                          onClick={() => { setShowInvoiceModal(true); setInvoiceIsMember(false); setInvoiceEmail(''); setInvoiceMembership(''); setInvoiceScanStep('choose') }}
-                        >
-                          <span className="payment-icon">{INVOICE_TYPE.icon}</span>
-                          <span className="payment-name">{INVOICE_TYPE.name}</span>
-                        </button>
-                      )}
-                    </>
+                  {PAYMENT_TYPES
+                    .filter((pt) => networkOnline || pt.id === 'cash')
+                    .map((pt) => (
+                    <button
+                      key={pt.id}
+                      className="payment-option"
+                      style={{ '--payment-color': pt.color }}
+                      onClick={() => processPayment(pt.id)}
+                    >
+                      <span className="payment-icon">{pt.icon}</span>
+                      <span className="payment-name">{pt.name}</span>
+                    </button>
+                  ))}
+                  {!networkOnline && (
+                    <button
+                      className="payment-option"
+                      style={{ '--payment-color': SCAN_PAY_TYPE.color }}
+                      onClick={processScanPay}
+                    >
+                      <span className="payment-icon">{SCAN_PAY_TYPE.icon}</span>
+                      <span className="payment-name">{SCAN_PAY_TYPE.name}</span>
+                    </button>
+                  )}
+                  {!networkOnline && (
+                    <button
+                      className="payment-option"
+                      style={{ '--payment-color': INVOICE_TYPE.color }}
+                      onClick={() => { setShowInvoiceModal(true); setInvoiceIsMember(false); setInvoiceEmail(''); setInvoiceMembership(''); setInvoiceScanStep('choose') }}
+                    >
+                      <span className="payment-icon">{INVOICE_TYPE.icon}</span>
+                      <span className="payment-name">{INVOICE_TYPE.name}</span>
+                    </button>
                   )}
                 </div>
                 <button className="cancel-payment" onClick={() => setShowPaymentModal(false)}>
