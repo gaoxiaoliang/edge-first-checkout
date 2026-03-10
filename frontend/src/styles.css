@@ -105,6 +105,15 @@ header h1 {
   border-color: var(--ica-text-muted);
 }
 
+.offline-banner {
+  background: #dc2626;
+  color: white;
+  text-align: center;
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+}
 
 .panel {
   background: var(--ica-surface);

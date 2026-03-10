@@ -1145,6 +1145,12 @@ export function App() {
         </div>
       </header>
 
+      {!networkOnline && (
+        <div className="offline-banner">
+          Store Offline{forceOffline ? ' (Simulated)' : ''} — Transactions will sync when connection is restored
+        </div>
+      )}
+
       {activeView === 'terminal-info' ? (
         <section className="panel terminal-info-panel">
           <div className="pending-header">
