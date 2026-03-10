@@ -2294,3 +2294,61 @@ button.preset-card.preset-active {
   border-radius: 12px;
   white-space: nowrap;
 }
+
+/* Price Override Styles */
+.price-override-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.price-override-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--ica-border-light);
+}
+
+.price-product-name {
+  flex: 1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.price-original {
+  color: var(--ica-text-muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.price-override-row .threshold-input {
+  width: 100px;
+}
+
+.price-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.sync-section-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.price-sync-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.price-sync-option input[type="radio"] {
+  accent-color: var(--ica-red);
+}

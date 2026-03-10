@@ -53,6 +53,8 @@ const TOKEN_KEY = 'ica_token'
 const PRIVATE_KEY_KEY = 'ica_terminal_private_key'
 const TERMINAL_CODE_KEY = 'ica_terminal_code'
 const SYSTEM_PUBLIC_KEY_KEY = 'ica_system_public_key'
+const PRICE_OVERRIDES_KEY = 'ica_price_overrides'
+const PRICE_SYNC_PREF_KEY = 'ica_price_sync_preference'
 
 // Generate random credit card number (masked format)
 const generateCardNumber = () => {
@@ -221,6 +223,9 @@ export function App() {
     SETTING_KEYS.every(k => p[k] === adminSettings[k])
   )?.name || null
   const [adminTab, setAdminTab] = useState('dashboard')
+  const [priceOverrides, setPriceOverrides] = useState(() => JSON.parse(localStorage.getItem(PRICE_OVERRIDES_KEY) || '{}'))
+  const [priceSyncPref, setPriceSyncPref] = useState(() => localStorage.getItem(PRICE_SYNC_PREF_KEY) || 'sync_cloud')
+  const [editingPrices, setEditingPrices] = useState({})
   const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -229,6 +234,14 @@ export function App() {
   const pendingTransactions = useMemo(
     () => JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]'),
     [syncCount]
+  )
+
+  const effectiveCatalog = useMemo(() =>
+    CATALOG.map(p => ({
+      ...p,
+      price: priceOverrides[p.id] !== undefined ? priceOverrides[p.id] : p.price
+    })),
+    [priceOverrides]
   )
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -265,6 +278,17 @@ export function App() {
       setRealNetworkOnline(false)
     }
   }, [token])
+
+  const prevNetworkOnline = useRef(networkOnline)
+  useEffect(() => {
+    if (networkOnline && !prevNetworkOnline.current) {
+      if (priceSyncPref !== 'keep_local') {
+        localStorage.removeItem(PRICE_OVERRIDES_KEY)
+        setPriceOverrides({})
+      }
+    }
+    prevNetworkOnline.current = networkOnline
+  }, [networkOnline, priceSyncPref])
 
   useEffect(() => {
     const syncOfflineTransactions = async () => {
@@ -537,6 +561,37 @@ export function App() {
       }
       return [...prev, { ...product, quantity: 1 }]
     })
+  }
+
+  const initEditingPrices = () => {
+    const prices = {}
+    effectiveCatalog.forEach(p => { prices[p.id] = p.price })
+    setEditingPrices(prices)
+  }
+
+  const saveAllPrices = () => {
+    const overrides = {}
+    Object.entries(editingPrices).forEach(([id, price]) => {
+      const defaultProduct = CATALOG.find(p => p.id === id)
+      if (defaultProduct && Number(price) !== defaultProduct.price) {
+        overrides[id] = Number(price)
+      }
+    })
+    localStorage.setItem(PRICE_OVERRIDES_KEY, JSON.stringify(overrides))
+    setPriceOverrides(overrides)
+  }
+
+  const resetToDefaultPrices = () => {
+    localStorage.removeItem(PRICE_OVERRIDES_KEY)
+    setPriceOverrides({})
+    const prices = {}
+    CATALOG.forEach(p => { prices[p.id] = p.price })
+    setEditingPrices(prices)
+  }
+
+  const handleSyncPrefChange = (pref) => {
+    localStorage.setItem(PRICE_SYNC_PREF_KEY, pref)
+    setPriceSyncPref(pref)
   }
 
   const updateQuantity = (id, quantity) => {
@@ -1232,6 +1287,7 @@ export function App() {
         <div className="admin-navbar">
           <button className={`admin-nav-item ${adminTab === 'dashboard' ? 'admin-nav-active' : ''}`} onClick={() => setAdminTab('dashboard')}>Dashboard</button>
           <button className={`admin-nav-item ${adminTab === 'settings' ? 'admin-nav-active' : ''}`} onClick={() => setAdminTab('settings')}>Settings</button>
+          <button className={`admin-nav-item ${adminTab === 'prices' ? 'admin-nav-active' : ''}`} onClick={() => { setAdminTab('prices'); initEditingPrices() }}>Prices</button>
           <div className="admin-nav-spacer" />
           <button className="admin-nav-back" onClick={() => setActiveView('checkout')}>Back to Checkout</button>
         </div>
@@ -1367,6 +1423,63 @@ export function App() {
             </div>
           </div>
 
+        </section>
+        ) : adminTab === 'prices' ? (
+        <section className="panel admin-panel">
+          <h3>Price Overrides</h3>
+          <p style={{ color: 'var(--ica-text-muted)', margin: '0 0 1rem' }}>
+            Adjust prices locally during outages (e.g. markdowns for perishables).
+          </p>
+          <div className="price-override-list">
+            {CATALOG.map(product => (
+              <div key={product.id} className="price-override-row">
+                <span className="price-product-name">{product.name}</span>
+                <span className="price-original">Default: {product.price.toFixed(2)} SEK</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className="threshold-input"
+                  value={editingPrices[product.id] ?? product.price}
+                  onChange={(e) => setEditingPrices(prev => ({ ...prev, [product.id]: e.target.value }))}
+                />
+                <span style={{ color: 'var(--ica-text-muted)', fontSize: '0.85rem' }}>SEK</span>
+              </div>
+            ))}
+          </div>
+          <div className="price-actions">
+            <button className="save-threshold-btn" onClick={saveAllPrices}>Save All</button>
+            <button className="save-threshold-btn" style={{ background: 'var(--ica-text-muted)' }} onClick={resetToDefaultPrices}>Reset to Defaults</button>
+          </div>
+
+          <div className={`custom-settings-section${Object.keys(priceOverrides).length === 0 ? ' sync-section-disabled' : ''}`} style={{ marginTop: '1.5rem' }}>
+            <h4>Reconnect Behavior</h4>
+            <p style={{ color: 'var(--ica-text-muted)', margin: '0 0 0.75rem', fontSize: '0.9rem' }}>
+              What happens to local price overrides when connectivity returns?
+            </p>
+            <label className="price-sync-option">
+              <input
+                type="radio"
+                name="priceSyncPref"
+                value="sync_cloud"
+                checked={priceSyncPref === 'sync_cloud'}
+                onChange={() => handleSyncPrefChange('sync_cloud')}
+              />
+              Sync cloud prices on reconnect
+              <span style={{ color: 'var(--ica-text-muted)', fontSize: '0.85rem', marginLeft: '0.5rem' }}>— overrides cleared when back online</span>
+            </label>
+            <label className="price-sync-option">
+              <input
+                type="radio"
+                name="priceSyncPref"
+                value="keep_local"
+                checked={priceSyncPref === 'keep_local'}
+                onChange={() => handleSyncPrefChange('keep_local')}
+              />
+              Keep local prices on reconnect
+              <span style={{ color: 'var(--ica-text-muted)', fontSize: '0.85rem', marginLeft: '0.5rem' }}>— overrides persist through reconnection</span>
+            </label>
+          </div>
         </section>
         ) : (
         <div className="admin-layout">
@@ -1591,7 +1704,7 @@ export function App() {
           <div className="panel">
             <h2>Product Catalog</h2>
             <div className="catalog-grid">
-              {CATALOG.map((product) => (
+              {effectiveCatalog.map((product) => (
                 <button
                   key={product.id}
                   className="product-card"
