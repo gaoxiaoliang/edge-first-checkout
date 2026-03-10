@@ -2114,6 +2114,22 @@ export function App() {
           </div>
         </div>
       )}
+
+      {/* Phone Frame Simulator */}
+      {scanPayUrl && (
+        <div className={`phone-frame ${!scanPayQrCode ? 'hidden' : ''}`}>
+          <div className="phone-label">Customer's Phone</div>
+          <div className="phone-notch"></div>
+          <div className="phone-screen">
+            <iframe
+              src={scanPayUrl}
+              title="Customer Phone View"
+              className="phone-iframe"
+            />
+          </div>
+          <div className="phone-home-indicator"></div>
+        </div>
+      )}
     </div>
   )
 }
