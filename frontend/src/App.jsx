@@ -226,6 +226,10 @@ export function App() {
   const [priceOverrides, setPriceOverrides] = useState(() => JSON.parse(localStorage.getItem(PRICE_OVERRIDES_KEY) || '{}'))
   const [priceSyncPref, setPriceSyncPref] = useState(() => localStorage.getItem(PRICE_SYNC_PREF_KEY) || 'sync_cloud')
   const [editingPrices, setEditingPrices] = useState({})
+  const [priceSearch, setPriceSearch] = useState('')
+  const [priceSearchOpen, setPriceSearchOpen] = useState(false)
+  const [showCartEditModal, setShowCartEditModal] = useState(false)
+  const [editingCartPrices, setEditingCartPrices] = useState({})
   const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -592,6 +596,21 @@ export function App() {
   const handleSyncPrefChange = (pref) => {
     localStorage.setItem(PRICE_SYNC_PREF_KEY, pref)
     setPriceSyncPref(pref)
+  }
+
+  const openCartEditModal = () => {
+    const prices = {}
+    cart.forEach(item => { prices[item.id] = item.price })
+    setEditingCartPrices(prices)
+    setShowCartEditModal(true)
+  }
+
+  const saveCartPrices = () => {
+    setCart(prev => prev.map(item => ({
+      ...item,
+      price: Number(editingCartPrices[item.id]) || item.price
+    })))
+    setShowCartEditModal(false)
   }
 
   const updateQuantity = (id, quantity) => {
@@ -1166,7 +1185,7 @@ export function App() {
   return (
     <div className="app-shell">
       <header>
-        <h1>ICA Self-Checkout</h1>
+        <h1>{activeView === 'admin' ? 'ICA Admin' : 'ICA Checkout'}</h1>
         <div className="header-actions">
           <span className={networkOnline ? 'status online' : 'status offline'}>
             {networkOnline ? 'Network: Online' : 'Network: Offline'}
@@ -1430,8 +1449,39 @@ export function App() {
           <p style={{ color: 'var(--ica-text-muted)', margin: '0 0 1rem' }}>
             Adjust prices locally during outages (e.g. markdowns for perishables).
           </p>
+          <div className="price-search-wrapper">
+            <input
+              type="text"
+              className="price-search-input"
+              placeholder="Search products..."
+              value={priceSearch}
+              onChange={(e) => { setPriceSearch(e.target.value); setPriceSearchOpen(true) }}
+              onFocus={() => { if (priceSearch) setPriceSearchOpen(true) }}
+            />
+            {priceSearchOpen && priceSearch && (() => {
+              const matches = CATALOG.filter(p => p.name.toLowerCase().includes(priceSearch.toLowerCase()))
+              return matches.length > 0 ? (
+                <div className="price-search-dropdown">
+                  {matches.map(product => (
+                    <button
+                      key={product.id}
+                      className="price-search-item"
+                      onClick={() => { setPriceSearch(product.name); setPriceSearchOpen(false) }}
+                    >
+                      <span className="price-search-item-name">{product.name}</span>
+                      <span className="price-search-item-price">{product.price.toFixed(2)} SEK</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="price-search-dropdown">
+                  <div className="price-search-empty">No products found</div>
+                </div>
+              )
+            })()}
+          </div>
           <div className="price-override-list">
-            {CATALOG.map(product => (
+            {CATALOG.filter(p => !priceSearch || p.name.toLowerCase().includes(priceSearch.toLowerCase())).map(product => (
               <div key={product.id} className="price-override-row">
                 <span className="price-product-name">{product.name}</span>
                 <span className="price-original">Default: {product.price.toFixed(2)} SEK</span>
@@ -1447,11 +1497,6 @@ export function App() {
               </div>
             ))}
           </div>
-          <div className="price-actions">
-            <button className="save-threshold-btn" onClick={saveAllPrices}>Save All</button>
-            <button className="save-threshold-btn" style={{ background: 'var(--ica-text-muted)' }} onClick={resetToDefaultPrices}>Reset to Defaults</button>
-          </div>
-
           <div className={`custom-settings-section${Object.keys(priceOverrides).length === 0 ? ' sync-section-disabled' : ''}`} style={{ marginTop: '1.5rem' }}>
             <h4>Reconnect Behavior</h4>
             <p style={{ color: 'var(--ica-text-muted)', margin: '0 0 0.75rem', fontSize: '0.9rem' }}>
@@ -1479,6 +1524,10 @@ export function App() {
               Keep local prices on reconnect
               <span style={{ color: 'var(--ica-text-muted)', fontSize: '0.85rem', marginLeft: '0.5rem' }}>— overrides persist through reconnection</span>
             </label>
+          </div>
+          <div className="price-actions">
+            <button className="save-threshold-btn" onClick={saveAllPrices}>Save All</button>
+            <button className="save-threshold-btn" style={{ background: 'var(--ica-text-muted)' }} onClick={resetToDefaultPrices}>Reset to Defaults</button>
           </div>
         </section>
         ) : (
@@ -1728,7 +1777,12 @@ export function App() {
           </div>
 
           <div className="panel">
-            <h2>Current Basket</h2>
+            <div className="basket-header">
+              <h2>Current Basket</h2>
+              {cart.length > 0 && (
+                <button className="basket-edit-btn" onClick={openCartEditModal}>Edit Prices</button>
+              )}
+            </div>
             {cart.length === 0 && <p>No products selected.</p>}
             {cart.length > 0 && (
               <div className="cart-table-header">
@@ -1756,6 +1810,36 @@ export function App() {
             </div>
           </div>
         </section>
+      )}
+
+      {/* Cart Price Edit Modal */}
+      {showCartEditModal && (
+        <div className="modal-overlay" onClick={() => setShowCartEditModal(false)}>
+          <div className="modal cart-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Edit Cart Prices</h2>
+            <div className="cart-edit-list">
+              {cart.map(item => (
+                <div key={item.id} className="cart-edit-row">
+                  <span className="cart-edit-name">{item.name}</span>
+                  <span className="cart-edit-qty">x{item.quantity}</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    className="threshold-input"
+                    value={editingCartPrices[item.id] ?? item.price}
+                    onChange={(e) => setEditingCartPrices(prev => ({ ...prev, [item.id]: e.target.value }))}
+                  />
+                  <span style={{ color: 'var(--ica-text-muted)', fontSize: '0.85rem' }}>SEK</span>
+                </div>
+              ))}
+            </div>
+            <div className="cart-edit-actions">
+              <button className="save-threshold-btn" onClick={saveCartPrices}>Save</button>
+              <button className="save-threshold-btn" style={{ background: 'var(--ica-text-muted)' }} onClick={() => setShowCartEditModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Payment Selection Modal */}
