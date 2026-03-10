@@ -151,7 +151,7 @@ export function App() {
   const [verifyErrorModal, setVerifyErrorModal] = useState(false) // Show verification error modal
   const [verifySuccessModal, setVerifySuccessModal] = useState(false) // Show verification success modal
   // Admin & Invoice state
-  const [adminSettings, setAdminSettings] = useState({
+  const DEFAULT_ADMIN_SETTINGS = {
     allow_invoice_members: true,
     allow_invoice_non_members: true,
     non_member_invoice_threshold: 10,
@@ -165,7 +165,8 @@ export function App() {
     allow_scan_pay: true,
     allow_invoice: true,
     offline_card_limit: 400
-  })
+  }
+  const [adminSettings, setAdminSettings] = useState(DEFAULT_ADMIN_SETTINGS)
   const [invoiceStats, setInvoiceStats] = useState({
     total_invoices: 0,
     total_invoice_amount: 0,
@@ -525,6 +526,18 @@ export function App() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
+      })
+      if (res.ok) setAdminSettings(await res.json())
+    } catch { /* offline - optimistic update stays */ }
+  }
+
+  const resetAdminSettings = async () => {
+    setAdminSettings(DEFAULT_ADMIN_SETTINGS)
+    try {
+      const res = await fetch(`${API_BASE}/admin/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(DEFAULT_ADMIN_SETTINGS)
       })
       if (res.ok) setAdminSettings(await res.json())
     } catch { /* offline - optimistic update stays */ }
@@ -1434,7 +1447,8 @@ export function App() {
             </div>
 
             <div className="settings-save-all">
-              <button className="save-threshold-btn settings-save-all-btn" onClick={saveAllAdminSettings}>Save All Settings</button>
+              <button className="save-threshold-btn settings-save-all-btn" onClick={saveAllAdminSettings}>Save</button>
+              <button className="save-threshold-btn settings-save-all-btn settings-reset-btn" onClick={resetAdminSettings}>Reset to Defaults</button>
             </div>
           </div>
 

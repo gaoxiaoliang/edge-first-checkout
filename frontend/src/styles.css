@@ -2505,16 +2505,22 @@ button.preset-card.preset-active {
   justify-content: flex-end;
 }
 
-/* Save All Settings button */
+/* Save / Reset Settings buttons */
 .settings-save-all {
   margin-top: 1.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--ica-border-light);
+  display: flex;
+  gap: 0.75rem;
 }
 
 .settings-save-all-btn {
-  width: 100%;
+  flex: 1;
   padding: 0.65rem 1rem;
   font-size: 1rem;
   font-weight: 600;
+}
+
+.settings-reset-btn {
+  background: var(--ica-text-muted);
 }
