@@ -39,7 +39,7 @@ const CATALOG = [
 const PAYMENT_TYPES = [
   { id: 'cash', name: 'Cash', icon: '💵', color: '#16a34a' },
   { id: 'credit_card', name: 'Card', icon: '💳', color: '#2563eb' },
-  { id: 'swish', name: 'Swish', icon: '📱', color: '#7c3aed' },
+  { id: 'swish', name: 'Swish', icon: <svg viewBox="0 0 32 32" width="28" height="28" fill="none"><circle cx="16" cy="16" r="16" fill="#391F6B"/><path d="M9.5 20.5c1.2 2.2 3.8 3 6 1.8 1-.5 1.6-1.3 2.4-2.3l2.4-3.2c.6-.8 1.1-1.4 1.8-1.8 1.5-.8 3.2-.2 3.8 1" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" fill="none"/><path d="M22.5 11.5c-1.2-2.2-3.8-3-6-1.8-1 .5-1.6 1.3-2.4 2.3l-2.4 3.2c-.6.8-1.1 1.4-1.8 1.8-1.5.8-3.2.2-3.8-1" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" fill="none"/></svg>, color: '#391F6B' },
   { id: 'apple_pay', name: 'Apple Pay', icon: '🍎', color: '#0f172a' },
   { id: 'google_pay', name: 'Google Pay', icon: '🔵', color: '#ea580c' }
 ]
