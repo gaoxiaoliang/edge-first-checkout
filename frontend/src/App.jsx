@@ -231,6 +231,7 @@ export function App() {
   const [priceSearchOpen, setPriceSearchOpen] = useState(false)
   const [showCartEditModal, setShowCartEditModal] = useState(false)
   const [editingCartPrices, setEditingCartPrices] = useState({})
+  const [analyticsMode, setAnalyticsMode] = useState('count') // 'count' | 'cost'
   const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
@@ -1447,8 +1448,8 @@ export function App() {
             </div>
 
             <div className="settings-save-all">
-              <button className="save-threshold-btn settings-save-all-btn" onClick={saveAllAdminSettings}>Save</button>
-              <button className="save-threshold-btn settings-save-all-btn settings-reset-btn" onClick={resetAdminSettings}>Reset to Defaults</button>
+              <button className="save-threshold-btn" onClick={saveAllAdminSettings}>Save</button>
+              <button className="save-threshold-btn settings-reset-btn" onClick={resetAdminSettings}>Reset to Default</button>
             </div>
           </div>
 
@@ -1537,7 +1538,7 @@ export function App() {
           </div>
           <div className="price-actions">
             <button className="save-threshold-btn" onClick={saveAllPrices}>Save All</button>
-            <button className="save-threshold-btn" style={{ background: 'var(--ica-text-muted)' }} onClick={resetToDefaultPrices}>Reset to Defaults</button>
+            <button className="save-threshold-btn" style={{ background: 'var(--ica-text-muted)' }} onClick={resetToDefaultPrices}>Reset to Default</button>
           </div>
         </section>
         ) : (
@@ -1635,36 +1636,40 @@ export function App() {
         </section>
 
         <section className="panel admin-chart-panel">
-          <h3>Payments Timeline</h3>
-          {timelineData.length === 0 ? (
+          <div className="analytics-header">
+            <h3>Payment Analytics</h3>
+            <select
+              className="analytics-dropdown"
+              value={analyticsMode}
+              onChange={(e) => setAnalyticsMode(e.target.value)}
+            >
+              <option value="count">Number of Sales</option>
+              <option value="cost">Total Cost (SEK)</option>
+            </select>
+          </div>
+          {Object.keys(dashboardStats.by_payment_type).length === 0 ? (
             <p className="chart-empty">No transactions yet. Make some checkouts!</p>
           ) : (() => {
-            const allTypes = new Set()
-            let maxCount = 0
-            for (const slot of timelineData) {
-              let slotTotal = 0
-              for (const [type, count] of Object.entries(slot.counts)) {
-                allTypes.add(type)
-                slotTotal += count
-              }
-              if (slotTotal > maxCount) maxCount = slotTotal
-            }
-            const typeList = [...allTypes]
-            const typeColors = {}
             const allPayTypes = [...PAYMENT_TYPES, SCAN_PAY_TYPE, INVOICE_TYPE]
-            for (const t of typeList) {
-              const info = allPayTypes.find(p => p.id === t)
-              typeColors[t] = info?.color || '#94a3b8'
+            const entries = Object.entries(dashboardStats.by_payment_type)
+              .sort((a, b) => b[1].count - a[1].count)
+            const typeColors = {}
+            for (const [type] of entries) {
+              const info = allPayTypes.find(p => p.id === type)
+              typeColors[type] = info?.color || '#94a3b8'
             }
-            const chartW = 500, chartH = 260, padL = 40, padB = 50, padT = 10, padR = 10
+            const maxVal = Math.max(...entries.map(([, d]) => analyticsMode === 'count' ? d.count : d.amount))
+            const chartW = 500, chartH = 260, padL = 60, padB = 60, padT = 10, padR = 10
             const plotW = chartW - padL - padR
             const plotH = chartH - padT - padB
-            const barGroupW = timelineData.length > 0 ? Math.min(plotW / timelineData.length, 60) : 40
-            const barW = Math.max(barGroupW * 0.7, 8)
-            const yScale = maxCount > 0 ? plotH / (maxCount * 1.15) : 1
+            const barGroupW = entries.length > 0 ? Math.min(plotW / entries.length, 80) : 40
+            const barW = Math.max(barGroupW * 0.6, 12)
+            const yScale = maxVal > 0 ? plotH / (maxVal * 1.15) : 1
             const gridLines = []
-            const yStep = Math.max(1, Math.ceil(maxCount / 4))
-            for (let v = 0; v <= maxCount + yStep; v += yStep) {
+            const yStep = analyticsMode === 'count'
+              ? Math.max(1, Math.ceil(maxVal / 4))
+              : Math.max(1, Math.ceil(maxVal / 4 / 10) * 10)
+            for (let v = 0; v <= maxVal + yStep; v += yStep) {
               const y = padT + plotH - v * yScale
               if (y < padT) break
               gridLines.push({ v, y })
@@ -1676,42 +1681,49 @@ export function App() {
                   {gridLines.map(({ v, y }) => (
                     <g key={v}>
                       <line x1={padL} x2={chartW - padR} y1={y} y2={y} stroke="#e4e4e4" strokeWidth="1" />
-                      <text x={padL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#757575">{v}</text>
+                      <text x={padL - 6} y={y + 4} textAnchor="end" fontSize="10" fill="#757575">
+                        {analyticsMode === 'cost' ? v.toFixed(0) : v}
+                      </text>
                     </g>
                   ))}
-                  {timelineData.map((slot, i) => {
+                  {entries.map(([type, data], i) => {
+                    const val = analyticsMode === 'count' ? data.count : data.amount
                     const x = padL + i * barGroupW + barGroupW / 2
-                    let cumY = 0
+                    const h = val * yScale
+                    const y = padT + plotH - h
+                    const info = allPayTypes.find(p => p.id === type)
+                    const label = info?.name || type
                     return (
-                      <g key={slot.minute}>
-                        {typeList.map(type => {
-                          const count = slot.counts[type] || 0
-                          if (count === 0) return null
-                          const h = count * yScale
-                          const segY = padT + plotH - cumY - h
-                          cumY += h
-                          return (
-                            <rect
-                              key={type}
-                              x={x - barW / 2}
-                              y={segY}
-                              width={barW}
-                              height={h}
-                              fill={typeColors[type]}
-                              rx="2"
-                            >
-                              <title>{type}: {count}</title>
-                            </rect>
-                          )
-                        })}
+                      <g key={type}>
+                        <rect
+                          x={x - barW / 2}
+                          y={y}
+                          width={barW}
+                          height={h}
+                          fill={typeColors[type]}
+                          rx="3"
+                        >
+                          <title>{label}: {analyticsMode === 'count' ? data.count : data.amount.toFixed(2) + ' SEK'}</title>
+                        </rect>
                         <text
                           x={x}
-                          y={chartH - padB + 16}
+                          y={padT + plotH - h - 5}
                           textAnchor="middle"
-                          fontSize="10"
-                          fill="#757575"
+                          fontSize="9"
+                          fill="#575757"
+                          fontWeight="500"
                         >
-                          {slot.minute}
+                          {analyticsMode === 'count' ? data.count : data.amount.toFixed(0)}
+                        </text>
+                        <text
+                          x={x}
+                          y={chartH - padB + 14}
+                          textAnchor="middle"
+                          fontSize="9"
+                          fill="#757575"
+                          transform={`rotate(-30, ${x}, ${chartH - padB + 14})`}
+                        >
+                          {label}
                         </text>
                       </g>
                     )
@@ -1719,17 +1731,6 @@ export function App() {
                   <line x1={padL} x2={padL} y1={padT} y2={padT + plotH} stroke="#d1d1d1" strokeWidth="1" />
                   <line x1={padL} x2={chartW - padR} y1={padT + plotH} y2={padT + plotH} stroke="#d1d1d1" strokeWidth="1" />
                 </svg>
-                <div className="chart-legend">
-                  {typeList.map(type => {
-                    const info = allPayTypes.find(p => p.id === type)
-                    return (
-                      <div key={type} className="legend-item">
-                        <span className="legend-dot" style={{ background: typeColors[type] }} />
-                        <span>{info?.icon} {info?.name || type}</span>
-                      </div>
-                    )
-                  })}
-                </div>
               </div>
             )
           })()}
