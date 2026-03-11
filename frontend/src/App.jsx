@@ -55,6 +55,7 @@ const TERMINAL_CODE_KEY = 'ica_terminal_code'
 const SYSTEM_PUBLIC_KEY_KEY = 'ica_system_public_key'
 const PRICE_OVERRIDES_KEY = 'ica_price_overrides'
 const PRICE_SYNC_PREF_KEY = 'ica_price_sync_preference'
+const SHOW_PHONE_FRAME_KEY = 'ica_show_phone_frame'
 
 // Generate random credit card number (masked format)
 const generateCardNumber = () => {
@@ -226,6 +227,7 @@ export function App() {
   const [adminTab, setAdminTab] = useState('dashboard')
   const [priceOverrides, setPriceOverrides] = useState(() => JSON.parse(localStorage.getItem(PRICE_OVERRIDES_KEY) || '{}'))
   const [priceSyncPref, setPriceSyncPref] = useState(() => localStorage.getItem(PRICE_SYNC_PREF_KEY) || 'sync_cloud')
+  const [showPhoneFrame, setShowPhoneFrame] = useState(() => localStorage.getItem(SHOW_PHONE_FRAME_KEY) !== 'false')
   const [editingPrices, setEditingPrices] = useState({})
   const [priceSearch, setPriceSearch] = useState('')
   const [priceSearchOpen, setPriceSearchOpen] = useState(false)
@@ -1330,6 +1332,28 @@ export function App() {
               </span>
             </div>
           </div>
+
+          <div className="private-key-section">
+            <h3>Phone Frame Simulator</h3>
+            <p className="key-description">
+              When enabled, a simulated phone frame showing the customer's payment screen will appear during Scan & Pay transactions (offline mode only).
+            </p>
+            <div className="key-actions">
+              <button 
+                onClick={() => {
+                  const newValue = !showPhoneFrame
+                  setShowPhoneFrame(newValue)
+                  localStorage.setItem(SHOW_PHONE_FRAME_KEY, String(newValue))
+                }} 
+                className="save-key-btn"
+              >
+                {showPhoneFrame ? 'Disable Phone Frame' : 'Enable Phone Frame'}
+              </button>
+              <span className="key-status">
+                {showPhoneFrame ? 'Phone frame is enabled' : 'Phone frame is disabled'}
+              </span>
+            </div>
+          </div>
         </section>
       ) : activeView === 'admin' ? (
         <>
@@ -2314,7 +2338,7 @@ export function App() {
       )}
 
       {/* Phone Frame Simulator */}
-      {scanPayUrl && (
+      {scanPayUrl && showPhoneFrame && (
         <div className={`phone-frame ${!scanPayQrCode ? 'hidden' : ''}`}>
           <div className="phone-label">Customer's Phone</div>
           <div className="phone-notch"></div>

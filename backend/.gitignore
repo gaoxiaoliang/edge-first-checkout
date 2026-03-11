@@ -6,3 +6,4 @@ uvicorn.log
 .idea/
 edge_checkout.db-shm
 edge_checkout.db-wal
+.env.bak
