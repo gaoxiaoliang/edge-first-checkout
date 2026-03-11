@@ -16,7 +16,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
-No test suite exists. SQLite DB is auto-created at `./edge_checkout.db` on startup.
+No test suite exists. SQLite DB is auto-created at `./edge_checkout.db` on startup (gitignored).
 
 ### Frontend - Self-Checkout (React/Vite)
 ```bash
@@ -42,7 +42,7 @@ npm run build
 - **`dashboard/`** — Single-file React app (`src/DashboardApp.jsx`) for store operations monitoring. Polls backend every 5 seconds.
 
 ### Key Backend Modules
-- `app/main.py` — All route handlers (auth, transactions, heartbeat, dashboard, mobile checkout, invoice payments). Also contains inline HTML generation for mobile checkout pages. ~47KB single file.
+- `app/main.py` — All route handlers (auth, transactions, heartbeat, dashboard, mobile checkout, invoice payments). Also contains inline HTML generation for mobile checkout pages. ~1200 lines, single file.
 - `app/database.py` — SQLite schema (terminals, transactions, admin_settings tables), connection factory, `terminal_status()` helper (30s staleness window). Uses idempotent `ALTER TABLE` for schema migrations.
 - `app/config.py` — Pydantic settings with env/`.env` support. Includes default dev ECDSA keys and optional Couchbase config.
 - `app/security.py` — JWT auth (HS256), password hashing, ECDSA keypair generation for terminals.
@@ -98,6 +98,13 @@ Couchbase (all optional):
 Frontend env vars (via Vite's `VITE_` prefix):
 - `VITE_API_BASE` — Backend URL (default: `http://localhost:8000`)
 - `VITE_MOBILE_CHECKOUT_BASE` — Mobile checkout base URL
+
+## Running the Full System
+1. Start backend first (`uvicorn app.main:app --reload`).
+2. Open dashboard and create a terminal account via the UI.
+3. Login from self-checkout frontend using terminal credentials.
+4. Process transactions online or offline (disconnect network to test offline mode).
+5. Reconnect network; background sync flushes the local queue automatically.
 
 ## Codebase Conventions
 - Backend has no test suite. Validate changes by running the server.

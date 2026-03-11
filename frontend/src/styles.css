@@ -2550,3 +2550,93 @@ button.preset-card.preset-active {
 .analytics-dropdown:focus {
   border-color: var(--ica-red);
 }
+
+/* Stock badges on product cards */
+.stock-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-top: 4px;
+}
+
+.stock-ok {
+  background: var(--ica-green-light);
+  color: var(--ica-green);
+}
+
+.stock-low {
+  background: var(--ica-yellow-light);
+  color: #92400e;
+}
+
+.stock-out {
+  background: var(--ica-error-light);
+  color: var(--ica-error);
+}
+
+.product-card.out-of-stock {
+  opacity: 0.5;
+  position: relative;
+  cursor: not-allowed;
+}
+
+.product-card.low-stock {
+  border: 2px solid #f59e0b;
+}
+
+.out-of-stock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.6);
+  font-weight: 900;
+  font-size: 1.1rem;
+  color: var(--ica-error);
+  border-radius: var(--ica-radius-lg);
+}
+
+/* Low stock banner */
+.low-stock-banner {
+  background: var(--ica-yellow-light);
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  padding: 0.5rem 1rem;
+  border-radius: var(--ica-radius);
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Stock report */
+.stock-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.stock-report-table th,
+.stock-report-table td {
+  padding: 0.6rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--ica-border-light);
+}
+
+.stock-report-table th {
+  font-weight: 700;
+  color: var(--ica-text-muted);
+  font-size: 0.85rem;
+}
+
+@media print {
+  header, .offline-banner, .low-stock-banner, .menu-wrap, .pending-header button, .force-offline-btn {
+    display: none !important;
+  }
+  .stock-report-panel {
+    box-shadow: none;
+    border: none;
+  }
+}

@@ -21,8 +21,14 @@ from .models import (
     AdminSettingsUpdateRequest,
     DashboardStatsResponse,
     HeartbeatRequest,
+    InventoryItemResponse,
+    InventoryUpdateRequest,
     InvoiceStatsResponse,
     LoginRequest,
+    LowStockReportItem,
+    LowStockReportResponse,
+    ReplenishmentProposalResponse,
+    ReplenishmentUpdateRequest,
     SyncBatchRequest,
     SyncStatusResponse,
     TerminalCreateRequest,
@@ -273,6 +279,33 @@ async def _record_transaction(
         ).fetchone()
         await db.close()
         return _tx_response(existing)
+
+    # Decrement inventory for each item sold
+    for item in payload.items:
+        await db.execute(
+            "UPDATE inventory SET stock_qty = MAX(stock_qty - ?, 0), updated_at = ? WHERE product_id = ?",
+            (item.quantity, created_at, item.product_id),
+        )
+        # Check for low stock and auto-create replenishment proposal
+        inv_row = await (
+            await db.execute(
+                "SELECT stock_qty, reorder_threshold, reorder_qty FROM inventory WHERE product_id = ?",
+                (item.product_id,),
+            )
+        ).fetchone()
+        if inv_row and inv_row["stock_qty"] <= inv_row["reorder_threshold"]:
+            existing_proposal = await (
+                await db.execute(
+                    "SELECT id FROM replenishment_proposals WHERE product_id = ? AND status = 'pending'",
+                    (item.product_id,),
+                )
+            ).fetchone()
+            if not existing_proposal:
+                await db.execute(
+                    "INSERT INTO replenishment_proposals (product_id, proposed_qty, current_stock, threshold, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+                    (item.product_id, inv_row["reorder_qty"], inv_row["stock_qty"], inv_row["reorder_threshold"], created_at),
+                )
+    await db.commit()
 
     row = await (
         await db.execute("SELECT * FROM transactions WHERE id = ?", (transaction_id,))
@@ -602,6 +635,167 @@ async def get_invoice_stats():
         non_member_invoice_threshold=threshold,
         auto_disabled=s.get("allow_invoice_non_members") != "true"
         and non_member_row["cnt"] >= threshold,
+    )
+
+
+# ============================================
+# Inventory Endpoints
+# ============================================
+
+
+@app.get("/inventory", response_model=list[InventoryItemResponse])
+async def get_inventory():
+    db = await get_db()
+    rows = await (await db.execute("SELECT * FROM inventory ORDER BY product_id")).fetchall()
+    await db.close()
+    return [
+        InventoryItemResponse(
+            product_id=r["product_id"],
+            name=r["name"],
+            price=r["price"],
+            stock_qty=r["stock_qty"],
+            reorder_threshold=r["reorder_threshold"],
+            reorder_qty=r["reorder_qty"],
+            low_stock=r["stock_qty"] <= r["reorder_threshold"],
+        )
+        for r in rows
+    ]
+
+
+@app.put("/inventory/{product_id}", response_model=InventoryItemResponse)
+async def update_inventory(product_id: str, payload: InventoryUpdateRequest):
+    db = await get_db()
+    row = await (
+        await db.execute("SELECT * FROM inventory WHERE product_id = ?", (product_id,))
+    ).fetchone()
+    if not row:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    updates = {}
+    if payload.stock_qty is not None:
+        updates["stock_qty"] = payload.stock_qty
+    if payload.reorder_threshold is not None:
+        updates["reorder_threshold"] = payload.reorder_threshold
+    if payload.reorder_qty is not None:
+        updates["reorder_qty"] = payload.reorder_qty
+
+    if updates:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values())
+        values.append(now_iso())
+        values.append(product_id)
+        await db.execute(
+            f"UPDATE inventory SET {set_clause}, updated_at = ? WHERE product_id = ?",
+            values,
+        )
+        await db.commit()
+
+    row = await (
+        await db.execute("SELECT * FROM inventory WHERE product_id = ?", (product_id,))
+    ).fetchone()
+    await db.close()
+    return InventoryItemResponse(
+        product_id=row["product_id"],
+        name=row["name"],
+        price=row["price"],
+        stock_qty=row["stock_qty"],
+        reorder_threshold=row["reorder_threshold"],
+        reorder_qty=row["reorder_qty"],
+        low_stock=row["stock_qty"] <= row["reorder_threshold"],
+    )
+
+
+@app.get("/inventory/replenishment", response_model=list[ReplenishmentProposalResponse])
+async def get_replenishment_proposals(status: str | None = None):
+    db = await get_db()
+    if status:
+        rows = await (
+            await db.execute(
+                "SELECT * FROM replenishment_proposals WHERE status = ? ORDER BY created_at DESC",
+                (status,),
+            )
+        ).fetchall()
+    else:
+        rows = await (
+            await db.execute("SELECT * FROM replenishment_proposals ORDER BY created_at DESC")
+        ).fetchall()
+    await db.close()
+    return [
+        ReplenishmentProposalResponse(
+            id=r["id"],
+            product_id=r["product_id"],
+            proposed_qty=r["proposed_qty"],
+            current_stock=r["current_stock"],
+            threshold=r["threshold"],
+            status=r["status"],
+            created_at=r["created_at"],
+            resolved_at=r["resolved_at"],
+        )
+        for r in rows
+    ]
+
+
+@app.put("/inventory/replenishment/{proposal_id}", response_model=ReplenishmentProposalResponse)
+async def update_replenishment_proposal(proposal_id: int, payload: ReplenishmentUpdateRequest):
+    db = await get_db()
+    row = await (
+        await db.execute("SELECT * FROM replenishment_proposals WHERE id = ?", (proposal_id,))
+    ).fetchone()
+    if not row:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    resolved_at = now_iso() if payload.status in ("fulfilled", "dismissed") else None
+    await db.execute(
+        "UPDATE replenishment_proposals SET status = ?, resolved_at = ? WHERE id = ?",
+        (payload.status, resolved_at, proposal_id),
+    )
+
+    # If fulfilled, add stock back
+    if payload.status == "fulfilled":
+        await db.execute(
+            "UPDATE inventory SET stock_qty = stock_qty + ?, updated_at = ? WHERE product_id = ?",
+            (row["proposed_qty"], now_iso(), row["product_id"]),
+        )
+
+    await db.commit()
+    updated = await (
+        await db.execute("SELECT * FROM replenishment_proposals WHERE id = ?", (proposal_id,))
+    ).fetchone()
+    await db.close()
+    return ReplenishmentProposalResponse(
+        id=updated["id"],
+        product_id=updated["product_id"],
+        proposed_qty=updated["proposed_qty"],
+        current_stock=updated["current_stock"],
+        threshold=updated["threshold"],
+        status=updated["status"],
+        created_at=updated["created_at"],
+        resolved_at=updated["resolved_at"],
+    )
+
+
+@app.get("/inventory/low-stock-report", response_model=LowStockReportResponse)
+async def get_low_stock_report():
+    db = await get_db()
+    rows = await (
+        await db.execute(
+            "SELECT * FROM inventory WHERE stock_qty <= reorder_threshold ORDER BY stock_qty ASC"
+        )
+    ).fetchall()
+    await db.close()
+    return LowStockReportResponse(
+        items=[
+            LowStockReportItem(
+                product_id=r["product_id"],
+                name=r["name"],
+                stock_qty=r["stock_qty"],
+                reorder_threshold=r["reorder_threshold"],
+                suggested_order_qty=r["reorder_qty"],
+            )
+            for r in rows
+        ]
     )
 
 

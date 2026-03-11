@@ -55,6 +55,7 @@ const TERMINAL_CODE_KEY = 'ica_terminal_code'
 const SYSTEM_PUBLIC_KEY_KEY = 'ica_system_public_key'
 const PRICE_OVERRIDES_KEY = 'ica_price_overrides'
 const PRICE_SYNC_PREF_KEY = 'ica_price_sync_preference'
+const LOCAL_STOCK_KEY = 'ica_local_stock'
 
 // Generate random credit card number (masked format)
 const generateCardNumber = () => {
@@ -233,6 +234,7 @@ export function App() {
   const [editingCartPrices, setEditingCartPrices] = useState({})
   const [analyticsMode, setAnalyticsMode] = useState('count') // 'count' | 'cost'
   const [invoiceScanStep, setInvoiceScanStep] = useState('choose') // 'choose' | 'scanning' | 'scanned'
+  const [localStock, setLocalStock] = useState(() => JSON.parse(localStorage.getItem(LOCAL_STOCK_KEY) || '{}'))
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -264,13 +266,28 @@ export function App() {
           },
           body: JSON.stringify({ current_load: pendingTransactions.length })
         })
-        setRealNetworkOnline(res.ok)  // 更新真实网络状态
+        setRealNetworkOnline(res.ok)
         if (res.status === 401) {
           handleUnauthorized()
           return
         }
+        // Fetch inventory on successful heartbeat
+        if (res.ok) {
+          try {
+            const invRes = await fetch(`${API_BASE}/inventory`)
+            if (invRes.ok) {
+              const invData = await invRes.json()
+              const stockMap = {}
+              invData.forEach(item => {
+                stockMap[item.product_id] = { stock_qty: item.stock_qty, reorder_threshold: item.reorder_threshold, low_stock: item.low_stock }
+              })
+              localStorage.setItem(LOCAL_STOCK_KEY, JSON.stringify(stockMap))
+              setLocalStock(stockMap)
+            }
+          } catch { /* ignore inventory fetch errors */ }
+        }
       } catch {
-        setRealNetworkOnline(false)  // 更新真实网络状态
+        setRealNetworkOnline(false)
       }
     }
 
@@ -292,6 +309,9 @@ export function App() {
         localStorage.removeItem(PRICE_OVERRIDES_KEY)
         setPriceOverrides({})
       }
+      // Clear local stock cache on reconnect; next heartbeat will fetch fresh data
+      localStorage.removeItem(LOCAL_STOCK_KEY)
+      setLocalStock({})
     }
     prevNetworkOnline.current = networkOnline
   }, [networkOnline, priceSyncPref])
@@ -392,6 +412,11 @@ export function App() {
 
   const goToPendingTransactions = () => {
     setActiveView('pending')
+    setMenuOpen(false)
+  }
+
+  const goToStockReport = () => {
+    setActiveView('stock-report')
     setMenuOpen(false)
   }
 
@@ -729,6 +754,17 @@ export function App() {
     const queue = JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]')
     localStorage.setItem(OFFLINE_KEY, JSON.stringify([...queue, payload]))
     setSyncCount((prev) => prev + 1)
+
+    // Decrement local stock cache for offline sales
+    const stock = JSON.parse(localStorage.getItem(LOCAL_STOCK_KEY) || '{}')
+    for (const item of payload.items || []) {
+      if (stock[item.product_id]) {
+        stock[item.product_id].stock_qty = Math.max(0, stock[item.product_id].stock_qty - item.quantity)
+        stock[item.product_id].low_stock = stock[item.product_id].stock_qty <= stock[item.product_id].reorder_threshold
+      }
+    }
+    localStorage.setItem(LOCAL_STOCK_KEY, JSON.stringify(stock))
+    setLocalStock(stock)
   }
 
   // Sign data with terminal private key (ECDSA P-256)
@@ -1215,7 +1251,7 @@ export function App() {
   return (
     <div className="app-shell">
       <header>
-        <h1>{activeView === 'admin' ? 'ICA Admin' : 'ICA Checkout'}</h1>
+        <h1>{activeView === 'admin' ? 'ICA Admin' : activeView === 'stock-report' ? 'ICA Stock Report' : 'ICA Checkout'}</h1>
         <div className="header-actions">
           <span className={networkOnline ? 'status online' : 'status offline'}>
             {networkOnline ? 'Network: Online' : 'Network: Offline'}
@@ -1241,6 +1277,7 @@ export function App() {
                   <button onClick={goToPendingTransactions}>
                     Pending Transactions ({pendingTransactions.length})
                   </button>
+                  <button onClick={goToStockReport}>Stock Report</button>
                   <button onClick={openAdmin}>Admin</button>
                   <button onClick={logout}>Sign Out</button>
                 </div>
@@ -1256,7 +1293,52 @@ export function App() {
         </div>
       )}
 
-      {activeView === 'terminal-info' ? (
+      {!networkOnline && (() => {
+        const lowStockItems = Object.entries(localStock).filter(([, s]) => s.low_stock)
+        return lowStockItems.length > 0 ? (
+          <div className="low-stock-banner">
+            Low Stock Warning: {lowStockItems.map(([pid]) => pid).join(', ')}
+          </div>
+        ) : null
+      })()}
+
+      {activeView === 'stock-report' ? (
+        <section className="panel stock-report-panel">
+          <div className="pending-header">
+            <h2>Low Stock Report</h2>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => window.print()}>Print Report</button>
+              <button onClick={() => setActiveView('checkout')}>Back to Checkout</button>
+            </div>
+          </div>
+          {(() => {
+            const lowItems = Object.entries(localStock)
+              .filter(([, s]) => s.low_stock)
+              .map(([pid, s]) => {
+                const cat = CATALOG.find(c => c.id === pid)
+                return { product_id: pid, name: cat?.name || pid, stock_qty: s.stock_qty, reorder_threshold: s.reorder_threshold, suggested_order_qty: Math.max(50, s.reorder_threshold * 2 - s.stock_qty) }
+              })
+            if (lowItems.length === 0) return <p>All products are well-stocked.</p>
+            return (
+              <table className="stock-report-table">
+                <thead>
+                  <tr><th>Product</th><th>Current Stock</th><th>Threshold</th><th>Suggested Order</th></tr>
+                </thead>
+                <tbody>
+                  {lowItems.map(item => (
+                    <tr key={item.product_id}>
+                      <td>{item.name}</td>
+                      <td style={{ color: item.stock_qty === 0 ? '#dc2626' : '#d97706', fontWeight: 700 }}>{item.stock_qty}</td>
+                      <td>{item.reorder_threshold}</td>
+                      <td>{item.suggested_order_qty}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          })()}
+        </section>
+      ) : activeView === 'terminal-info' ? (
         <section className="panel terminal-info-panel">
           <div className="pending-header">
             <h2>Terminal Information</h2>
@@ -1764,26 +1846,37 @@ export function App() {
           <div className="panel">
             <h2>Product Catalog</h2>
             <div className="catalog-grid">
-              {effectiveCatalog.map((product) => (
-                <button
-                  key={product.id}
-                  className="product-card"
-                  onClick={() => addProduct(product)}
-                  disabled={!token}
-                >
-                  {product.image && (
-                    <img 
-                      src={product.image} 
-                      alt={product.name} 
-                      className="product-card-image"
-                    />
-                  )}
-                  <div className="product-card-content">
-                    <strong className="product-card-name">{product.name}</strong>
-                    <span className="product-card-price">{product.price.toFixed(2)} SEK</span>
-                  </div>
-                </button>
-              ))}
+              {effectiveCatalog.map((product) => {
+                const stock = localStock[product.id]
+                const outOfStock = stock && stock.stock_qty === 0
+                const lowStock = stock && stock.low_stock && stock.stock_qty > 0
+                return (
+                  <button
+                    key={product.id}
+                    className={`product-card${outOfStock ? ' out-of-stock' : ''}${lowStock ? ' low-stock' : ''}`}
+                    onClick={() => addProduct(product)}
+                    disabled={!token || outOfStock}
+                  >
+                    {product.image && (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="product-card-image"
+                      />
+                    )}
+                    <div className="product-card-content">
+                      <strong className="product-card-name">{product.name}</strong>
+                      <span className="product-card-price">{product.price.toFixed(2)} SEK</span>
+                      {stock && (
+                        <span className={`stock-badge${outOfStock ? ' stock-out' : lowStock ? ' stock-low' : ' stock-ok'}`}>
+                          {outOfStock ? 'Out of Stock' : `${stock.stock_qty} left`}
+                        </span>
+                      )}
+                    </div>
+                    {outOfStock && <div className="out-of-stock-overlay">Out of Stock</div>}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

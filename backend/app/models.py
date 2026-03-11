@@ -188,3 +188,46 @@ class InvoiceStatsResponse(BaseModel):
     non_member_invoice_amount: float
     non_member_invoice_threshold: int
     auto_disabled: bool
+
+
+class InventoryItemResponse(BaseModel):
+    product_id: str
+    name: str
+    price: float
+    stock_qty: int
+    reorder_threshold: int
+    reorder_qty: int
+    low_stock: bool
+
+
+class InventoryUpdateRequest(BaseModel):
+    stock_qty: int | None = None
+    reorder_threshold: int | None = None
+    reorder_qty: int | None = None
+
+
+class ReplenishmentProposalResponse(BaseModel):
+    id: int
+    product_id: str
+    proposed_qty: int
+    current_stock: int
+    threshold: int
+    status: str
+    created_at: str
+    resolved_at: str | None = None
+
+
+class ReplenishmentUpdateRequest(BaseModel):
+    status: Literal["ordered", "fulfilled", "dismissed"]
+
+
+class LowStockReportItem(BaseModel):
+    product_id: str
+    name: str
+    stock_qty: int
+    reorder_threshold: int
+    suggested_order_qty: int
+
+
+class LowStockReportResponse(BaseModel):
+    items: list[LowStockReportItem]

@@ -55,8 +55,43 @@ async def init_db() -> None:
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS inventory (
+            product_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            price REAL NOT NULL,
+            stock_qty INTEGER NOT NULL DEFAULT 0,
+            reorder_threshold INTEGER NOT NULL DEFAULT 10,
+            reorder_qty INTEGER NOT NULL DEFAULT 50,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS replenishment_proposals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_id TEXT NOT NULL,
+            proposed_qty INTEGER NOT NULL,
+            current_stock INTEGER NOT NULL,
+            threshold INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            resolved_at TEXT
+        );
         """
     )
+
+    # Seed inventory with default products
+    inventory_seed = [
+        ("banan", "Banan Eko i klase Klass 1 ICA", 15.00),
+        ("mjolk", "Mellanmjölkdryck 1,5% Laktosfri 1,5l Arla Ko", 26.90),
+        ("cola", "Läsk Cola Zero 1,5l Coca-Cola", 24.90),
+        ("druvor", "Druvor Crimson Röda Kärnfria 500g Klass 1 ICA", 25.00),
+        ("tortilla", "Tortilla Original Medium 8p 320g Santa Maria", 17.90),
+    ]
+    for pid, name, price in inventory_seed:
+        await db.execute(
+            "INSERT OR IGNORE INTO inventory (product_id, name, price, stock_qty, reorder_threshold, reorder_qty, updated_at) VALUES (?, ?, ?, 100, 10, 50, ?)",
+            (pid, name, price, now_iso()),
+        )
 
     # Seed default admin settings
     now = now_iso()
