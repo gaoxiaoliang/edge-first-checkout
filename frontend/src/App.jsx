@@ -1776,7 +1776,11 @@ export function App() {
                 <div key={item.idempotency_key || index} className="pending-item">
                   <strong>{item.idempotency_key || `Offline transaction ${index + 1}`}</strong>
                   <span>Amount: {Number(item.total_amount || 0).toFixed(2)} SEK</span>
-                  <span>Items: {item.items?.length || 0}</span>
+                  <div className="pending-items-list">
+                    {item.items?.map((product, idx) => (
+                      <span key={idx}>{product.name} x{product.quantity}</span>
+                    ))}
+                  </div>
                   <span>Occurred at: {item.occurred_at || 'Unknown'}</span>
                 </div>
               ))}
