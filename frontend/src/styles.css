@@ -2631,6 +2631,25 @@ button.preset-card.preset-active {
   font-size: 0.85rem;
 }
 
+.stock-report-low {
+  background: #fef3c7;
+}
+
+.stock-status-green {
+  color: var(--ica-green);
+  font-weight: 700;
+}
+
+.stock-status-yellow {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.stock-status-red {
+  color: #dc2626;
+  font-weight: 700;
+}
+
 @media print {
   header, .offline-banner, .low-stock-banner, .menu-wrap, .pending-header button, .force-offline-btn {
     display: none !important;

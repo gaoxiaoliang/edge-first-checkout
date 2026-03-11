@@ -279,7 +279,7 @@ export function App() {
               const invData = await invRes.json()
               const stockMap = {}
               invData.forEach(item => {
-                stockMap[item.product_id] = { stock_qty: item.stock_qty, reorder_threshold: item.reorder_threshold, low_stock: item.low_stock }
+                stockMap[item.product_id] = { stock_qty: item.stock_qty, reorder_threshold: item.reorder_threshold, reorder_qty: item.reorder_qty, low_stock: item.low_stock, name: item.name }
               })
               localStorage.setItem(LOCAL_STOCK_KEY, JSON.stringify(stockMap))
               setLocalStock(stockMap)
@@ -415,9 +415,22 @@ export function App() {
     setMenuOpen(false)
   }
 
-  const goToStockReport = () => {
+  const goToStockReport = async () => {
     setActiveView('stock-report')
     setMenuOpen(false)
+    // Fetch fresh inventory from server when online
+    try {
+      const res = await fetch(`${API_BASE}/inventory`)
+      if (res.ok) {
+        const invData = await res.json()
+        const stockMap = {}
+        invData.forEach(item => {
+          stockMap[item.product_id] = { stock_qty: item.stock_qty, reorder_threshold: item.reorder_threshold, reorder_qty: item.reorder_qty, low_stock: item.low_stock, name: item.name }
+        })
+        localStorage.setItem(LOCAL_STOCK_KEY, JSON.stringify(stockMap))
+        setLocalStock(stockMap)
+      }
+    } catch { /* offline — use cached localStock */ }
   }
 
   const openAdmin = () => {
@@ -1305,32 +1318,36 @@ export function App() {
       {activeView === 'stock-report' ? (
         <section className="panel stock-report-panel">
           <div className="pending-header">
-            <h2>Low Stock Report</h2>
+            <h2>Stock Report</h2>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button onClick={() => window.print()}>Print Report</button>
               <button onClick={() => setActiveView('checkout')}>Back to Checkout</button>
             </div>
           </div>
           {(() => {
-            const lowItems = Object.entries(localStock)
-              .filter(([, s]) => s.low_stock)
+            const allItems = Object.entries(localStock)
               .map(([pid, s]) => {
                 const cat = CATALOG.find(c => c.id === pid)
-                return { product_id: pid, name: cat?.name || pid, stock_qty: s.stock_qty, reorder_threshold: s.reorder_threshold, suggested_order_qty: Math.max(50, s.reorder_threshold * 2 - s.stock_qty) }
+                return { product_id: pid, name: s.name || cat?.name || pid, stock_qty: s.stock_qty, reorder_threshold: s.reorder_threshold, low_stock: s.low_stock, suggested_order_qty: s.low_stock ? Math.max(s.reorder_qty || 50, s.reorder_threshold * 2 - s.stock_qty) : 0 }
               })
-            if (lowItems.length === 0) return <p>All products are well-stocked.</p>
+            if (allItems.length === 0) return <p>No inventory data available. Make sure the terminal is connected.</p>
             return (
               <table className="stock-report-table">
                 <thead>
-                  <tr><th>Product</th><th>Current Stock</th><th>Threshold</th><th>Suggested Order</th></tr>
+                  <tr><th>Product</th><th>Current Stock</th><th>Threshold</th><th>Status</th><th>Suggested Order</th></tr>
                 </thead>
                 <tbody>
-                  {lowItems.map(item => (
-                    <tr key={item.product_id}>
+                  {allItems.map(item => (
+                    <tr key={item.product_id} className={item.low_stock ? 'stock-report-low' : ''}>
                       <td>{item.name}</td>
-                      <td style={{ color: item.stock_qty === 0 ? '#dc2626' : '#d97706', fontWeight: 700 }}>{item.stock_qty}</td>
+                      <td style={{ color: item.stock_qty === 0 ? '#dc2626' : item.low_stock ? '#d97706' : '#16a34a', fontWeight: 700 }}>{item.stock_qty}</td>
                       <td>{item.reorder_threshold}</td>
-                      <td>{item.suggested_order_qty}</td>
+                      <td>
+                        <span className={item.stock_qty === 0 ? 'stock-status-red' : item.low_stock ? 'stock-status-yellow' : 'stock-status-green'}>
+                          {item.stock_qty === 0 ? 'Out of Stock' : item.low_stock ? 'Low Stock' : 'In Stock'}
+                        </span>
+                      </td>
+                      <td>{item.low_stock ? item.suggested_order_qty : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
