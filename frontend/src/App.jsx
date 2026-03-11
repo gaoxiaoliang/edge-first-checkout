@@ -1781,6 +1781,13 @@ export function App() {
                       <span key={idx}>{product.name} x{product.quantity}</span>
                     ))}
                   </div>
+                  {item.payment?.payment_type === 'invoice' && (
+                    <span>
+                      Invoice: {item.payment.invoice?.is_member 
+                        ? `Member ${item.payment.invoice.membership_number}` 
+                        : item.payment.invoice?.customer_email}
+                    </span>
+                  )}
                   <span>Occurred at: {item.occurred_at || 'Unknown'}</span>
                 </div>
               ))}
