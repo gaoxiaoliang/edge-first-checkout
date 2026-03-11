@@ -2313,11 +2313,15 @@ export function App() {
         <div className="modal-overlay">
           <div className="modal invoice-email-modal">
             <div className="success-icon">✓</div>
-            <h2>Invoice Sent!</h2>
+            <h2>{networkOnline ? 'Invoice Sent!' : 'Invoice Saved'}</h2>
             <p className="invoice-sent-to">
               {invoiceEmailSent.isMember
-                ? `Invoice sent to ICA member ${invoiceEmailSent.recipient}`
-                : `Invoice email sent to ${invoiceEmailSent.recipient}`}
+                ? (networkOnline 
+                  ? `Invoice sent to ICA member ${invoiceEmailSent.recipient}`
+                  : `Invoice queued for ICA member ${invoiceEmailSent.recipient}`)
+                : (networkOnline 
+                  ? `Invoice email sent to ${invoiceEmailSent.recipient}`
+                  : `Invoice queued for ${invoiceEmailSent.recipient} - will send when online`)}
             </p>
             <p className="invoice-sent-amount">{invoiceEmailSent.amount.toFixed(2)} SEK</p>
             <p className="invoice-sent-items">{invoiceEmailSent.items.length} item(s)</p>
